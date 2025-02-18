@@ -1,0 +1,16 @@
+{
+  "name": "walcht.ctvisualizer.Editor",
+  "rootNamespace": "UnityCTVisualizer",
+  "references": [],
+  "optionalUnityReferences": [],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "noEngineReferences": false,
+  "precompiledReferences": [
+    "Newtonsoft.Json.dll"
+  ]
+}

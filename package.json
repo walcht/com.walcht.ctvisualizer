@@ -1,0 +1,39 @@
+{
+  "name": "com.walcht.ctvisualizer",
+  "version": "0.0.1",
+  "displayName": "CT Visualizer",
+  "description": "High performance, out-of-core CT/MRI volume visualizer for very large datasets using the Unity game engine",
+  "unity": "6000.0",
+  "keywords": [
+    "ct",
+    "mri",
+    "volume rendering"
+  ],
+  "author": {
+    "name": "Walid Chtioui",
+    "email": "walid.chtioui@ensi-uma.tn",
+    "url": "https://github.com/walcht"
+  },
+  "samples": [
+    {
+      "displayName": "Desktop CT Visualizer",
+      "description": "CT Visualizer sample for Windows/Linux target builds",
+      "path": "Samples~/desktop"
+    },
+    {
+      "displayName": "XR CT Visualizer",
+      "description": "CT Visualizer sample for XR (e.g., Magic Leap 2, Occulus, etc.) target builds",
+      "path": "Samples~/xr"
+    }
+  ],
+  "git-dependencies": [
+    {
+      "name": "Simple File Browser",
+      "url": "https://github.com/yasirkula/UnitySimpleFileBrowser.git"
+    },
+    {
+      "name": "HSV Color Picker",
+      "url": "https://github.com/walcht/com.walcht.vrcolorpicker.git"
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+    "name": "'UnityCTVisualizerInput'",
+    "maps": [
+        {
+            "name": "VolumetricObjectControls",
+            "id": "3331f265-8976-47ab-9358-5339ca680113",
+            "actions": [
+                {
+                    "name": "Scale",
+                    "type": "Value",
+                    "id": "6073668b-178b-455d-90f6-acb3adc031c7",
+                    "expectedControlType": "Vector2",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "SlowScaleActivator",
+                    "type": "Button",
+                    "id": "5c824625-8ce3-486e-85c4-4791c161e4b2",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "469de6c6-daed-4279-80ec-b376e2e47bcb",
+                    "path": "<Mouse>/scroll",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Scale",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "f035aff9-67cc-465d-b3e5-e9dedb58d738",
+                    "path": "<Pointer>/scroll",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Scale",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "01ec5642-8f67-4c18-84c8-8b70804d6ce8",
+                    "path": "<Keyboard>/shift",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "SlowScaleActivator",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
+        }
+    ],
+    "controlSchemes": []
+}
