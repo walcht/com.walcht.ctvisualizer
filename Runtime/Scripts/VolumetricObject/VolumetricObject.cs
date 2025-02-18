@@ -260,16 +260,17 @@ namespace UnityCTVisualizer {
             // m_attached_mesh_renderer.sharedMaterial.SetBuffer(SHADER_BRICK_CACHE_MISSES_BUFFER, m_brick_cache_misses_buffer);
 
             // scale mesh to match correct dimensions of the original volumetric data
-            m_transform.localScale = new Vector3(
-                m_volume_dataset.Metadata.VoxelDims.x * m_volume_dataset.Metadata.NbrChunksPerResolutionLvl[0].x * MM_TO_METERS,
-                m_volume_dataset.Metadata.VoxelDims.y * m_volume_dataset.Metadata.NbrChunksPerResolutionLvl[0].y * MM_TO_METERS,
-                m_volume_dataset.Metadata.VoxelDims.z * m_volume_dataset.Metadata.NbrChunksPerResolutionLvl[0].z * MM_TO_METERS
-            );
+            // m_transform.localScale = new Vector3(
+            //     m_volume_dataset.Metadata.VoxelDims.x * m_volume_dataset.Metadata.NbrChunksPerResolutionLvl[0].x * MM_TO_METERS,
+            //     m_volume_dataset.Metadata.VoxelDims.y * m_volume_dataset.Metadata.NbrChunksPerResolutionLvl[0].y * MM_TO_METERS,
+            //     m_volume_dataset.Metadata.VoxelDims.z * m_volume_dataset.Metadata.NbrChunksPerResolutionLvl[0].z * MM_TO_METERS
+            // );
 
             // rotate the volume according to provided Euler angles
             m_transform.localRotation = Quaternion.Euler(m_volume_dataset.Metadata.EulerRotation);
 
-            m_progress_handler.Enable();
+            
+            m_progress_handler?.Enable();
             if (m_rendering_mode == RenderingMode.IN_CORE) {
                 Task t = Task.Run(() => {
                     switch (m_volume_dataset.Metadata.ColorDepth) {
