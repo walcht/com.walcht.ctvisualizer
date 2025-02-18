@@ -1,6 +1,8 @@
 using UnityEngine;
 using UnityCTVisualizer;
+#if UNITY_ANDROID
 using UnityEngine.Android;
+#endif
 
 public class DebugVolumeObjectInitializer : MonoBehaviour
 {
@@ -11,10 +13,12 @@ public class DebugVolumeObjectInitializer : MonoBehaviour
     private VolumetricDataset m_VolumetricDataset;
     void Start()
     {
+#if UNITY_ANDROID
         // request permissions
-        if (Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead)) {
+        if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead)) {
             Permission.RequestUserPermission(Permission.ExternalStorageRead);
         }
+#endif
 
         // import dataset
         m_VolumetricDataset = ScriptableObject.CreateInstance<VolumetricDataset>();
