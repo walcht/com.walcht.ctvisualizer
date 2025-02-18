@@ -1,9 +1,11 @@
+#if UNITY_ANDROID
 using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Text;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Android;
 
 namespace UnityCTVisualizer
 {
@@ -61,6 +63,10 @@ namespace UnityCTVisualizer
         throw new NullReferenceException("TMP_Text component has to be provided!");
       }
       m_messageQueue = new ConcurrentQueue<string>();
+      // request write permissions
+      if (m_writeLogFile && !Permission.HasUserAuthorizedPermission(Permission.ExternalStorageWrite)) {
+          Permission.RequestUserPermission(Permission.ExternalStorageWrite);
+      }
       // Triggered regardless of whether the message comes in on the main thread or not; handler is thread safe
       Application.logMessageReceivedThreaded += Application_logMessageReceivedThreaded;
       if (m_writeLogFile)
@@ -135,3 +141,4 @@ namespace UnityCTVisualizer
     }
   }
 }
+#endif
