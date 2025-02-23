@@ -1,11 +1,9 @@
-#if UNITY_ANDROID
 using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Text;
 using TMPro;
 using UnityEngine;
-using UnityEngine.Android;
 
 namespace UnityCTVisualizer
 {
@@ -20,7 +18,7 @@ namespace UnityCTVisualizer
     public LogType m_logLevel = LogType.Error;
 
 
-    [Tooltip("Check this if you want the stack trace printed after the message.")]
+    [Tooltip("Check this if you want stack trace logging.")]
     public bool m_logStackTrace = false;
 
     [Tooltip("Log stack trace for log levels. Setting this to true adds a lot of text!")]
@@ -28,16 +26,6 @@ namespace UnityCTVisualizer
 
     [Tooltip("Which log level to include stack tracing for.")]
     public LogType m_stackTraceLogLevel = LogType.Error;
-
-
-
-    [Header("Visual Feedback")]
-    [Tooltip("Whether to write the logs to a log file")]
-    public bool m_writeLogFile;
-
-    [Tooltip("Log file path. Make sure to set this to a valid path on the target before building!")]
-    public string m_logFilePath;
-
 
     [Header("Performance")]
     [Tooltip("Maximum number of messages in the text UI before deleting the older messages.")]
@@ -47,9 +35,6 @@ namespace UnityCTVisualizer
     public int m_maxNbrMessagesPerFrame = 10;
 
     private bool m_dirty = false;
-
-    private FileStream m_fs = null;
-    private StreamWriter m_sw = null;
 
     [SerializeField] private TMP_Text m_debugText;
 
@@ -63,27 +48,13 @@ namespace UnityCTVisualizer
         throw new NullReferenceException("TMP_Text component has to be provided!");
       }
       m_messageQueue = new ConcurrentQueue<string>();
-      // request write permissions
-      if (m_writeLogFile && !Permission.HasUserAuthorizedPermission(Permission.ExternalStorageWrite)) {
-          Permission.RequestUserPermission(Permission.ExternalStorageWrite);
-      }
       // Triggered regardless of whether the message comes in on the main thread or not; handler is thread safe
       Application.logMessageReceivedThreaded += Application_logMessageReceivedThreaded;
-      if (m_writeLogFile)
-      {
-        if (File.Exists(m_logFilePath))
-          m_fs = File.Open(m_logFilePath, FileMode.Append, FileAccess.Write, FileShare.None);
-        else if (Directory.Exists(Path.GetDirectoryName(m_logFilePath)))
-          m_fs = File.Open(m_logFilePath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-        m_sw = new StreamWriter(m_fs, Encoding.ASCII);
-      }
     }
 
     void OnDisable()
     {
       Application.logMessageReceivedThreaded -= Application_logMessageReceivedThreaded;
-      m_sw?.Close();
-      m_fs?.Close();
     }
 
 
@@ -98,19 +69,19 @@ namespace UnityCTVisualizer
         switch (log_type)
         {
           case LogType.Log:
-            stringBuilder.Append("[INF] ");
+            stringBuilder.Append("[INFO] ");
             break;
           case LogType.Warning:
-            stringBuilder.Append("[WAR] ");
+            stringBuilder.Append("[WARNING] ");
             break;
           case LogType.Error:
-            stringBuilder.Append("[ERR] ");
+            stringBuilder.Append("[ERROR] ");
             break;
           case LogType.Exception:
-            stringBuilder.Append("[EXC] ");
+            stringBuilder.Append("[EXCEPTION] ");
             break;
           case LogType.Assert:
-            stringBuilder.Append("[ASS] ");
+            stringBuilder.Append("[ASSERT] ");
             break;
         }
         stringBuilder.AppendFormat("{0} {1}", timestamp, log_string);
@@ -134,11 +105,9 @@ namespace UnityCTVisualizer
           ++counter;
         }
         string all_messages = string_build.ToString();
-        m_sw?.Write(all_messages);
         m_debugText.text += all_messages;
         m_dirty = false;
       }
     }
   }
 }
-#endif

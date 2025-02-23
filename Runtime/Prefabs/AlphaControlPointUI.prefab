@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 8738051532555169362}
   - component: {fileID: 1116387276626572587}
   - component: {fileID: 5219658777247429601}
+  - component: {fileID: 2728514621907946007}
   m_Layer: 5
   m_Name: AlphaControlPointUI
   m_TagString: Untagged
@@ -120,3 +121,18 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &2728514621907946007
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1705453905609900449}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d152723243b28065c925a3f0dc3b6205, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_ControlPointSelectable: {fileID: 5219658777247429601}
+  m_ControlPointTransform: {fileID: 3685344737092641117}
+  m_Image: {fileID: 1116387276626572587}

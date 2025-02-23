@@ -78,7 +78,6 @@ namespace UnityCTVisualizer {
 
         private Transform m_transform;
         private Material m_material;
-        private IProgressHandler m_progress_handler;
 
         private ConcurrentQueue<UInt32> m_brick_reply_queue = new();
 
@@ -88,14 +87,13 @@ namespace UnityCTVisualizer {
         }
 
         public void Init(VolumetricDataset volumetricDataset, RenderingMode rendering_mode,
-            int brick_cache_dim_size = -1, int resolution_lvl = 0, IProgressHandler progressHandler = null) {
+            int brick_cache_dim_size = -1, int resolution_lvl = 0) {
 
             if (volumetricDataset == null)
                 throw new ArgumentNullException("the provided volumetric dataset should be a non-null reference");
 
             m_rendering_mode = rendering_mode;
             m_volume_dataset = volumetricDataset;
-            m_progress_handler = progressHandler;
             m_resolution_lvl = resolution_lvl;
 
             CVDSMetadata metadata = volumetricDataset.Metadata;
@@ -188,7 +186,9 @@ namespace UnityCTVisualizer {
         }
 
         private IEnumerator InternalInit() {
+            Debug.Log("VolumetricObject: waiting for volume dataset and transfer function to be non null ...");
             yield return new WaitUntil(() => (m_volume_dataset != null) && (m_transfer_function != null));
+            Debug.Log("VolumetricObject: started internal init");
 
             // initialize colordepth-dependent stuff
             switch (m_volume_dataset.Metadata.ColorDepth) {
@@ -260,27 +260,33 @@ namespace UnityCTVisualizer {
             // m_attached_mesh_renderer.sharedMaterial.SetBuffer(SHADER_BRICK_CACHE_MISSES_BUFFER, m_brick_cache_misses_buffer);
 
             // scale mesh to match correct dimensions of the original volumetric data
-            // m_transform.localScale = new Vector3(
-            //     m_volume_dataset.Metadata.VoxelDims.x * m_volume_dataset.Metadata.NbrChunksPerResolutionLvl[0].x * MM_TO_METERS,
-            //     m_volume_dataset.Metadata.VoxelDims.y * m_volume_dataset.Metadata.NbrChunksPerResolutionLvl[0].y * MM_TO_METERS,
-            //     m_volume_dataset.Metadata.VoxelDims.z * m_volume_dataset.Metadata.NbrChunksPerResolutionLvl[0].z * MM_TO_METERS
-            // );
+            m_transform.localScale = new Vector3(
+                 m_volume_dataset.Metadata.VoxelDims.x
+                  * m_volume_dataset.Metadata.NbrChunksPerResolutionLvl[m_resolution_lvl].x
+                  * m_volume_dataset.Metadata.ChunkSize * MM_TO_METERS,
+                 m_volume_dataset.Metadata.VoxelDims.y
+                  * m_volume_dataset.Metadata.NbrChunksPerResolutionLvl[m_resolution_lvl].y
+                  * m_volume_dataset.Metadata.ChunkSize * MM_TO_METERS,
+                 m_volume_dataset.Metadata.VoxelDims.z
+                  * m_volume_dataset.Metadata.NbrChunksPerResolutionLvl[m_resolution_lvl].z
+                  * m_volume_dataset.Metadata.ChunkSize * MM_TO_METERS
+            );
 
             // rotate the volume according to provided Euler angles
             m_transform.localRotation = Quaternion.Euler(m_volume_dataset.Metadata.EulerRotation);
 
-            
-            m_progress_handler?.Enable();
+            // enable the progress bar
+            ProgressHandlerEvents.OnRequestActivate?.Invoke(true);
             if (m_rendering_mode == RenderingMode.IN_CORE) {
                 Task t = Task.Run(() => {
                     switch (m_volume_dataset.Metadata.ColorDepth) {
                         case ColorDepth.UINT8:
                         Importer.LoadAllBricksIntoCache(m_volume_dataset.Metadata, m_brick_size, m_resolution_lvl,
-                            m_cache_uint8, m_brick_reply_queue, m_progress_handler);
+                            m_cache_uint8, m_brick_reply_queue);
                         break;
                         case ColorDepth.UINT16:
                         Importer.LoadAllBricksIntoCache(m_volume_dataset.Metadata, m_brick_size, m_resolution_lvl,
-                            m_cache_uint16, m_brick_reply_queue, m_progress_handler);
+                            m_cache_uint16, m_brick_reply_queue);
                         break;
                         default:
                         throw new NotImplementedException();

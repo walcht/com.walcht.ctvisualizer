@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Threading.Tasks;
 using K4os.Compression.LZ4;
 using Newtonsoft.Json;
@@ -18,6 +19,7 @@ namespace UnityCTVisualizer {
     }
 
     public class CVDSMetadata {
+
         internal class CVDSMetadataInternal {
             [JsonProperty("original_dims")]
             public int[] OriginalDims { get; set; }
@@ -51,18 +53,51 @@ namespace UnityCTVisualizer {
             [JsonProperty("euler_rotation")]
             public float[] EulerRotation { get; set; }
         }
+
         public CVDSMetadata(string root_fp) {
             string metadata_fp = Path.Join(root_fp, "metadata.json");
-            if (!File.Exists(metadata_fp)) {
-                throw new FileNotFoundException($"metadata.json file was not found in provided CVDS directory: {root_fp}");
+            if (!Directory.Exists(root_fp)) {
+                throw new Exception($"provided CVDS directory path is not a valide directory path: {root_fp}");
             }
-            CVDSMetadataInternal metadata = JsonConvert.DeserializeObject<CVDSMetadataInternal>(File.ReadAllText(metadata_fp));
+            if (!File.Exists(metadata_fp)) {
+                throw new Exception($"metadata.json file was not found in provided CVDS directory: {root_fp}");
+            }
+            bool deserializationError = false;
+            StringBuilder error_sb = new();
+            CVDSMetadataInternal metadata = JsonConvert.DeserializeObject<CVDSMetadataInternal>(
+                File.ReadAllText(metadata_fp),
+                new JsonSerializerSettings {
+                  Error = (object sender, Newtonsoft.Json.Serialization.ErrorEventArgs args) => {
+                    error_sb.Append(args.ErrorContext.Error.Message);
+                    args.ErrorContext.Handled = true;
+                    deserializationError = true;
+                  }
+                });
+            if (deserializationError) {
+              throw new Exception(error_sb.ToString());
+            }
+
             // assign metadata properties/attributes
             RootFilepath = root_fp;
+
+            if (metadata.OriginalDims.Length != 3)
+                throw new Exception($"invalid original dimensions length {metadata.OriginalDims.Length}. Expected 3");
+            if (metadata.OriginalDims[0] <= 0 || metadata.OriginalDims[1] <= 0 || metadata.OriginalDims[2] <= 0)
+                throw new Exception($"invalid original dimensions {metadata.OriginalDims}. Expected dimensions > 0");
             Dims = new Vector3Int(metadata.OriginalDims[0], metadata.OriginalDims[1], metadata.OriginalDims[2]);
+
+            if (metadata.ChunkSize < 32 || metadata.ChunkSize >= 1024)
+                throw new Exception($"invalid chunk size {metadata.ChunkSize}. Expected [32, 1024[");
+            if ((metadata.ChunkSize & (metadata.ChunkSize - 1)) != 0)
+                throw new Exception($"invalid chunk size {metadata.ChunkSize}. Expected power of 2");
             ChunkSize = metadata.ChunkSize;
+
+            if (metadata.NbrResolutionLvls <= 0)
+                throw new Exception($"invalid number of resolution levels: {metadata.NbrResolutionLvls}");
             NbrResolutionLvls = metadata.NbrResolutionLvls;
+
             DecompressedSizeInBytes = metadata.DecompressedChunkSizeInBytes;
+
             switch (metadata.ColorDepth) {
                 case 8: {
                     ColorDepth = ColorDepth.UINT8;
@@ -73,19 +108,34 @@ namespace UnityCTVisualizer {
                     break;
                 }
                 default: {
-                    throw new Exception($"unexpected color depth value: {metadata.ColorDepth}");
+                    throw new Exception($"invalid color depth value: {metadata.ColorDepth}");
                 }
             }
+
             Lz4Compressed = metadata.Lz4Compressed;
+
+            if (metadata.VoxelDims.Length != 3)
+                throw new Exception($"invalid voxel dims length {metadata.VoxelDims.Length}. Expected 3");
+            if (metadata.VoxelDims[0] <= 0 || metadata.VoxelDims[1] <= 0 || metadata.VoxelDims[2] <= 0)
+                throw new Exception($"invalid voxel dims {metadata.VoxelDims}. Expected dimensions > 0");
             VoxelDims = new Vector3(metadata.VoxelDims[0], metadata.VoxelDims[1], metadata.VoxelDims[2]);
+
+            if (metadata.EulerRotation.Length != 3)
+                throw new Exception($"invalid Euler rotation length {metadata.EulerRotation.Length}. Expected 3");
             EulerRotation = new Vector3(metadata.EulerRotation[0], metadata.EulerRotation[1], metadata.EulerRotation[2]);
+            
+            if (metadata.NbrChunksPerResolutionLvl.Length != metadata.NbrResolutionLvls)
+                throw new Exception($"invalid number chunks per resolution level length {metadata.NbrChunksPerResolutionLvl.Length}");
             NbrChunksPerResolutionLvl = new Vector3Int[metadata.NbrChunksPerResolutionLvl.Length];
+
             for (int i = 0; i < metadata.NbrChunksPerResolutionLvl.Length; ++i) {
-                Assert.IsTrue(metadata.NbrChunksPerResolutionLvl[i].Length == 3, "expected 3 elements (x, y, z) in array element");
+                if (metadata.NbrChunksPerResolutionLvl[i].Length != 3)
+                  throw new Exception($"invalid number chunks per resolution level entry. Expected 3 elements");
                 NbrChunksPerResolutionLvl[i] = new Vector3Int(metadata.NbrChunksPerResolutionLvl[i][0],
                     metadata.NbrChunksPerResolutionLvl[i][1],
                     metadata.NbrChunksPerResolutionLvl[i][2]);
             }
+
             // assign chunk filepaths for each resolution level
             ChunkFilepaths = new string[NbrResolutionLvls + 1][];
             for (int res_lvl = 0; res_lvl < NbrResolutionLvls; ++res_lvl) {
@@ -105,65 +155,82 @@ namespace UnityCTVisualizer {
                 }
                 ChunkFilepaths[res_lvl] = chunk_fps;
             }
-            DownsamplingInter = (DownsamplingInterpolation)Enum.Parse(typeof(DownsamplingInterpolation), metadata.DownsamplingInter.ToUpper());
+
+            try {
+              DownsamplingInter = (DownsamplingInterpolation)Enum.Parse(typeof(DownsamplingInterpolation), metadata.DownsamplingInter.ToUpper());
+            } catch (Exception e) {
+              throw new Exception($"invalid downsampling interpolation value {metadata.DownsamplingInter}. {e.Message}");
+            }
         }
+
+        /// <summary>
+        ///     The root filepath of the CVDS dataset. This is the directory containing the metadata.json file along
+        ///     with resolution_lvl_n subfolders which containt volume chunks.
+        /// </summary>
+        public string RootFilepath { get; private set; }
+
         public Vector3Int Dims { get; private set; }
+
+        /// <summary>
+        ///     Chunk size. Anisotropic (i.e., with different dimension sizes) are not supported. Additionally, chunk
+        ///     size is a power of two and should idealy be set to a value that allows for optimal filesystem read
+        ///     speed.
+        /// </summary>
         public int ChunkSize { get; private set; }
+
         public long CompressedSizeInBytes { get; private set; }
 
         /// <summary>
-        ///     This is simply: ChunkSize * ChunkSize * ChunkSize * voxel_size_bytes
-        ///     with, for example, voxel_size_bytes = 2 in case ColorDepth is UINT16
+        ///     This is simply: ChunkSize * ChunkSize * ChunkSize * voxel_size_bytes with, for example,
+        ///     voxel_size_bytes = 2 in case ColorDepth is UINT16
         /// </summary>
         public long DecompressedSizeInBytes { get; private set; }
 
         /// <summary>
-        ///     Number of resolution levels up-to and including this number.
-        ///     Resolution level 0 corresponds to highest resolution, resolution level 1
+        ///     Number of resolution levels. Resolution level 0 corresponds to highest resolution, resolution level 1
         ///     is downsampled once from resolution level 0, and so on.
         /// </summary>
         public int NbrResolutionLvls { get; private set; }
 
         public ColorDepth ColorDepth { get; private set; }
 
+        /// <summary>
+        ///     Whether the chunks are LZ4 compressed.
+        /// </summary>
         public bool Lz4Compressed { get; private set; }
 
         /// <summary>
-        ///     Physical dimensions in mm of a voxel (i.e., a 3D cube corresponding
-        ///     to a sampled region of space).
+        ///     Physical dimensions in mm of a voxel (i.e., a 3D cube corresponding to a sampled region of space).
         /// </summary>
         public Vector3 VoxelDims { get; private set; }
+
         public Vector3 EulerRotation { get; private set; }
 
         /// <summary>
-        ///     Which downsampling interpolation is used to generate coarser volume chunks.
-        ///     Currently only trillinear interpolation (i.e., averaging) is supported.
-        ///     The usage of other downsampling interpolators introduces significant challenges
-        ///     further down the pipeline.
+        ///     Which downsampling interpolation is used to generate coarser volume chunks. Currently only trillinear
+        ///     interpolation (i.e., averaging) is supported. The usage of other downsampling interpolators introduces
+        ///     significant challenges further down the pipeline.
         /// </summary>
         public DownsamplingInterpolation DownsamplingInter { get; private set; }
 
         /// <summary>
-        /// 
+        ///     Number of chunks per each resolution level. Number of entries is equal to NbrResolutionLvls and each
+        ///     entry holds the number of chunks along each dimension (nbr_chunks_x, nbr_chunks_y, nbr_chunks_z).
         /// </summary>
         public Vector3Int[] NbrChunksPerResolutionLvl { get; private set; }
-        public string RootFilepath { get; private set; }
 
         /// <summary>
-        ///     Chunks filepaths grouped per resolution level. Should be accessed as
-        ///     follows: ChunkFilepaths[resolution_lvl][chunk_id]
+        ///     Chunks filepaths grouped per resolution level. Should be accessed as follows:
+        ///     ChunkFilepaths[resolution_lvl][chunk_id]
         /// </summary>
         public string[][] ChunkFilepaths { get; private set; }
 
     }
 
     public static class Importer {
+
         public static CVDSMetadata ImportMetadata(string dataset_path) {
-            try {
-                return new CVDSMetadata(dataset_path);
-            } catch (Exception e) {
-                throw new FileLoadException($"Failed to extract CVDS dataset from provided dataset directory, reason: {e.Message}");
-            }
+            return new CVDSMetadata(dataset_path);
         }
 
         public static int BrickToChunkID(CVDSMetadata metadata, UInt32 brick_id, int brick_size) {
@@ -265,62 +332,56 @@ namespace UnityCTVisualizer {
         }
 
         public static void LoadAllBricksIntoCache(CVDSMetadata metadata, int brick_size, int resolution_lvl,
-            MemoryCache<byte> cache, ConcurrentQueue<UInt32> brick_reply_queue,
-            IProgressHandler progressHandler = null) {
+            MemoryCache<byte> cache, ConcurrentQueue<UInt32> brick_reply_queue) {
             Stopwatch stopwatch = Stopwatch.StartNew();
             long total_nbr_bricks = metadata.NbrChunksPerResolutionLvl[resolution_lvl].x *
                 metadata.NbrChunksPerResolutionLvl[resolution_lvl].y *
                 metadata.NbrChunksPerResolutionLvl[resolution_lvl].z *
                 (int)Math.Pow(metadata.ChunkSize / brick_size, 3);
-            if (progressHandler != null) {
-                progressHandler.MaxProgressValue = (int)total_nbr_bricks;
-                progressHandler.Message = $"uploading {total_nbr_bricks} bricks to host memory cache ...";
-            }
+            
+            // update progress bar UI value and message
+            ProgressHandlerEvents.OnRequestMaxProgressValueUpdate?.Invoke((int)total_nbr_bricks);
+            ProgressHandlerEvents.OnRequestProgressMessageUpdate?.Invoke($"uploading {total_nbr_bricks} bricks to host memory cache ...");
+
             UnityEngine.Debug.Log($"uploading {total_nbr_bricks} bricks to host memory cache ...");
             Parallel.For(0, total_nbr_bricks, new ParallelOptions() {
-                TaskScheduler = new LimitedConcurrencyLevelTaskScheduler(Environment.ProcessorCount - 2)
+                TaskScheduler = new LimitedConcurrencyLevelTaskScheduler(1)
             }, i => {
                 UInt32 brick_id = (UInt32)i | (UInt32)resolution_lvl << 26;
                 ImportBrick(metadata, brick_id, brick_size, cache);
                 brick_reply_queue.Enqueue(brick_id);
-                if (progressHandler != null) {
-                    progressHandler.IncrementProgress();
-                }
+                // increment progress value by 1
+                ProgressHandlerEvents.OnRequestProgressValueIncrement?.Invoke();
             });
             stopwatch.Stop();
-            if (progressHandler != null) {
-                progressHandler.Message = $"all {total_nbr_bricks} bricks uploaded in {stopwatch.Elapsed.TotalSeconds:0.00}s";
-            }
+            ProgressHandlerEvents.OnRequestProgressMessageUpdate?.Invoke($"all {total_nbr_bricks} bricks uploaded in {stopwatch.Elapsed.TotalSeconds:0.00}s");
             UnityEngine.Debug.Log($"uploading to host memory cache took: {stopwatch.Elapsed}s");
         }
 
         public static void LoadAllBricksIntoCache(CVDSMetadata metadata, int brick_size, int resolution_lvl,
-            MemoryCache<UInt16> cache, ConcurrentQueue<UInt32> brick_reply_queue,
-            IProgressHandler progressHandler = null) {
+            MemoryCache<UInt16> cache, ConcurrentQueue<UInt32> brick_reply_queue) {
             Stopwatch stopwatch = Stopwatch.StartNew();
             long total_nbr_bricks = metadata.NbrChunksPerResolutionLvl[resolution_lvl].x *
                 metadata.NbrChunksPerResolutionLvl[resolution_lvl].y *
                 metadata.NbrChunksPerResolutionLvl[resolution_lvl].z *
                 (int)Math.Pow(metadata.ChunkSize / brick_size, 3);
-            if (progressHandler != null) {
-                progressHandler.MaxProgressValue = (int)total_nbr_bricks;
-                progressHandler.Message = $"uploading {total_nbr_bricks} bricks to host memory cache ...";
-            }
+
+            // update progress bar UI value and message
+            ProgressHandlerEvents.OnRequestMaxProgressValueUpdate?.Invoke((int)total_nbr_bricks);
+            ProgressHandlerEvents.OnRequestProgressMessageUpdate?.Invoke($"uploading {total_nbr_bricks} bricks to host memory cache ...");
+
             UnityEngine.Debug.Log($"uploading {total_nbr_bricks} bricks to CPU memory cache ...");
             Parallel.For(0, total_nbr_bricks, new ParallelOptions() {
-                TaskScheduler = new LimitedConcurrencyLevelTaskScheduler(Environment.ProcessorCount - 2)
+                TaskScheduler = new LimitedConcurrencyLevelTaskScheduler(1)
             }, i => {
                 UInt32 brick_id = (UInt32)i | (UInt32)resolution_lvl << 26;
                 ImportBrick(metadata, brick_id, brick_size, cache);
                 brick_reply_queue.Enqueue(brick_id);
-                if (progressHandler != null) {
-                    progressHandler.IncrementProgress();
-                }
+                // increment progress value by 1
+                ProgressHandlerEvents.OnRequestProgressValueIncrement?.Invoke();
             });
             stopwatch.Stop();
-            if (progressHandler != null) {
-                progressHandler.Message = $"all {total_nbr_bricks} bricks uploaded in {stopwatch.Elapsed.TotalSeconds:0.00}s";
-            }
+            ProgressHandlerEvents.OnRequestProgressMessageUpdate?.Invoke($"all {total_nbr_bricks} bricks uploaded in {stopwatch.Elapsed.TotalSeconds:0.00}s");
             UnityEngine.Debug.Log($"uploading to CPU memory cache took: {stopwatch.Elapsed}s");
         }
 

@@ -87,13 +87,8 @@ namespace UnityCTVisualizer {
         private CVDSMetadata m_metadata;
         public CVDSMetadata Metadata { get => m_metadata; }
 
-        [SerializeField]
-        private string m_dataset_path;
-        public string DatasetPath { get => m_dataset_path; }
-
-        public void Init(string dataset_path) {
-            m_dataset_path = dataset_path;
-            m_metadata = Importer.ImportMetadata(m_dataset_path);
+        public void Init(CVDSMetadata metadata) {
+            m_metadata = metadata;
         }
 
         /*

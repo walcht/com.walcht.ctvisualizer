@@ -4,21 +4,7 @@ using TMPro;
 using UnityEngine;
 
 namespace UnityCTVisualizer {
-    public interface IProgressHandler {
-        /// <summary>
-        ///     Progress from 0 to MaxProgressValue. Read and update operataions are thread-safe.
-        /// </summary>
-        void IncrementProgress();
-        int MaxProgressValue { get; set; }
-        string Message { set; }
-
-        /// <summary>
-        ///     Enable the attached GameObject. Should only be called from main thread!
-        /// </summary>
-        void Enable();
-    }
-
-    public class ProgressHandler : MonoBehaviour, IProgressHandler {
+    public class ProgressHandler : MonoBehaviour {
         private int m_progress;
         private string m_progress_txt;
         private bool m_txt_dirty = false;
@@ -32,22 +18,19 @@ namespace UnityCTVisualizer {
         void OnEnable() {
             m_ProgressBar.anchorMax = new Vector2(0.0f, 1.0f);
             m_PercentageText.text = "0 %";
+            m_TextMessage.text = "";
+
+            // progress bar handler events
+            ProgressHandlerEvents.OnRequestMaxProgressValueUpdate += OnRequestMaxProgressValueUpdate;
+            ProgressHandlerEvents.OnRequestProgressValueIncrement += OnRequestProgressValueIncrement;
+            ProgressHandlerEvents.OnRequestProgressMessageUpdate += OnRequestProgressMessageUpdate;
         }
 
-        public void IncrementProgress() {
-            Interlocked.Increment(ref m_progress);
-            m_progress_dirty = true;
-        }
-
-        public string Message { set { m_progress_txt = value; m_txt_dirty = true; } }
-
-        public int MaxProgressValue {
-            get => m_max_progress_value;
-            set => m_max_progress_value = value;
-        }
-
-        public void Enable() {
-            gameObject.SetActive(true);
+        void OnDisable() {
+            // progress bar handler events
+            ProgressHandlerEvents.OnRequestMaxProgressValueUpdate -= OnRequestMaxProgressValueUpdate;
+            ProgressHandlerEvents.OnRequestProgressValueIncrement -= OnRequestProgressValueIncrement;
+            ProgressHandlerEvents.OnRequestProgressMessageUpdate -= OnRequestProgressMessageUpdate;
         }
 
         void Update() {
@@ -61,6 +44,16 @@ namespace UnityCTVisualizer {
                 m_TextMessage.text = m_progress_txt;
                 m_txt_dirty = false;
             }
+        }
+
+        void OnRequestMaxProgressValueUpdate(int val) => m_max_progress_value = val;
+        void OnRequestProgressValueIncrement() {
+            Interlocked.Increment(ref m_progress);
+            m_progress_dirty = true;
+        }
+        void OnRequestProgressMessageUpdate(string msg) {
+            m_progress_txt = msg;
+            m_txt_dirty = true;
         }
     }
 }

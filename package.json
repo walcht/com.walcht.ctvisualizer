@@ -28,10 +28,6 @@
   ],
   "git-dependencies": [
     {
-      "name": "Simple File Browser",
-      "url": "https://github.com/yasirkula/UnitySimpleFileBrowser.git"
-    },
-    {
       "name": "HSV Color Picker",
       "url": "https://github.com/walcht/com.walcht.vrcolorpicker.git"
     }

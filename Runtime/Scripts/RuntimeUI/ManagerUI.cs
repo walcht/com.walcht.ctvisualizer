@@ -1,37 +1,45 @@
 using UnityEngine;
+using System;
 
 namespace UnityCTVisualizer {
     public enum TF {
         TF1D,
-        // TF2D - currently not added
+        // TF2D - currently not supported
     }
 
     public class ManagerUI : MonoBehaviour {
-        public GameObject m_VolumetricObjectPrefab;
+        [SerializeField] ImporterUI m_ImporterUI;
+        [SerializeField] DatasetMetadataUI m_MetadataUI;
+        [SerializeField] VisualizationParametersUI m_VisualizationParamsUI;
+        [SerializeField] TransferFunction1DUI m_TransferFunction1DUI;
+        [SerializeField] ProgressHandler m_ProgressHandlerUI;
 
-        public ImporterUI m_ImporterUI;
-        public DatasetMetadataUI m_MetadataUI;
-        public VisualizationParametersUI m_VisualizationParamsUI;
-        public TransferFunction1DUI m_TransferFunction1DUI;
-        public ProgressHandler m_ProgressHandlerUI;
-
-        private VolumetricObject m_VolumetricObject;
-        public Vector3 m_VolumetricObjectPosition;
-
-        void Awake() {
-            m_ImporterUI.gameObject.SetActive(true);
+        private void Awake() {
+            m_TransferFunction1DUI.gameObject.SetActive(false);
+            m_VisualizationParamsUI.gameObject.SetActive(false);
+            m_ProgressHandlerUI.gameObject.SetActive(false);
         }
 
         private void OnEnable() {
+            m_ImporterUI.gameObject.SetActive(true);
             VisualizationParametersEvents.ModelTFChange += OnModelTFChange;
 
-            m_ImporterUI.OnDatasetLoad += OnDatasetLoad;
+            InitializationEvents.OnMetadataImport += OnMetadataImport;
+            InitializationEvents.OnVolumetricDatasetCreation += OnVolumetricDatasetCreation;
+
+            // progress handler events
+            ProgressHandlerEvents.OnRequestActivate += ProgressHandlerEvents_OnRequestActivate;
         }
 
         private void OnDisable() {
-            VisualizationParametersEvents.ModelTFChange += OnModelTFChange;
+            m_ImporterUI.gameObject.SetActive(false);
+            VisualizationParametersEvents.ModelTFChange -= OnModelTFChange;
 
-            m_ImporterUI.OnDatasetLoad -= OnDatasetLoad;
+            InitializationEvents.OnMetadataImport -= OnMetadataImport;
+            InitializationEvents.OnVolumetricDatasetCreation -= OnVolumetricDatasetCreation;
+
+            // progress handler events
+            ProgressHandlerEvents.OnRequestActivate -= ProgressHandlerEvents_OnRequestActivate;
         }
 
         private void OnModelTFChange(TF new_tf, ITransferFunction tf_so) {
@@ -44,27 +52,16 @@ namespace UnityCTVisualizer {
             }
         }
 
-        void OnDatasetLoad(VolumetricDataset volumetricDataset) {
-            // TODO: improve this. It's not UI's job to instantiate this ...
-            m_VolumetricObject = Instantiate<GameObject>(
-                    m_VolumetricObjectPrefab,
-                    position: m_VolumetricObjectPosition,
-                    rotation: Quaternion.identity
-                )
-                .GetComponent<VolumetricObject>();
-            m_VolumetricObject.Init(volumetricDataset, RenderingMode.IN_CORE, resolution_lvl: 0,
-                progressHandler: m_ProgressHandlerUI);
-            m_VolumetricObject.enabled = true;
-
-            m_MetadataUI.Init(volumetricDataset.Metadata);
+        void OnMetadataImport(Tuple<CVDSMetadata, VolumeInitializationParams> args) {
+            m_MetadataUI.Init(args.Item1);
             m_MetadataUI.gameObject.SetActive(true);
+        }
 
+        void OnVolumetricDatasetCreation(VolumetricDataset _) {
             // initial state for these objects is "undefined" but they are listening for change
             m_VisualizationParamsUI.gameObject.SetActive(true);
-
-            // make the volumetric model dispatch its default visualization params state so that
-            // listeners get the default visualization parameters
-            volumetricDataset.DispatchVisualizationParamsChangeEvents();
         }
+
+        void ProgressHandlerEvents_OnRequestActivate(bool val) => m_ProgressHandlerUI.gameObject.SetActive(val);
     }
 }

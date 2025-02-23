@@ -1,6 +1,12 @@
 using System;
 
 namespace UnityCTVisualizer {
+    public struct VolumeInitializationParams {
+      public int brickSize;
+      public int highestResolutionLvl;
+      public int nbrImporterThreads;
+    }
+
     public static class VisualizationParametersEvents {
         ////////////////////////////////
         /// Invoked by Models (SOs)

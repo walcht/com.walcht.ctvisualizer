@@ -12,7 +12,6 @@ GameObject:
   - component: {fileID: 7792705119133824540}
   - component: {fileID: 4154116069845246419}
   - component: {fileID: 2034905668642507873}
-  - component: {fileID: 6678064435525622475}
   m_Layer: 0
   m_Name: VolumetricObject
   m_TagString: Untagged
@@ -55,11 +54,14 @@ MeshRenderer:
   m_ReceiveShadows: 0
   m_DynamicOccludee: 1
   m_StaticShadowCaster: 0
-  m_MotionVectors: 1
+  m_MotionVectors: 2
   m_LightProbeUsage: 0
   m_ReflectionProbeUsage: 0
   m_RayTracingMode: 2
   m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -100,20 +102,3 @@ MonoBehaviour:
   m_brick_wireframe: {fileID: 4892012301941521694, guid: 849307a6568aa3540950412a75d20762, type: 3}
   InstantiateBrickWireframes: 0
   ForceNativeTextureCreation: 0
---- !u!114 &6678064435525622475
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6524694346905046297}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1685c5354d4f6c721b5f41053562b186, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_ScaleSpeed: 0.005
-  m_ScaleSlowDown: 0.25
-  m_MaxScale: 10
-  m_Rotate: 1
-  m_RotationSpeed: 15
