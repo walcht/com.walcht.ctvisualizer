@@ -37,3 +37,11 @@ crashlytics-build.properties
 
 # MacOS
 .DS_Store
+
+# native plugin builds
+*.dll
+*.so
+TextureSubPlugin.dll
+TextureSubPlugin.dll.meta
+libTextureSubPlugin.so
+libTextureSubPlugin.so.meta

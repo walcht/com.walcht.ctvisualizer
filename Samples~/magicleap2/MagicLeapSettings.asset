@@ -12,5 +12,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 628f733a0c88540fda1a824fc8f83797, type: 3}
   m_Name: MagicLeapSettings
   m_EditorClassIdentifier: 
-  enableMLAudio: 1
+  enableMLAudio: 0
   permissionsMinApiLevel: 29

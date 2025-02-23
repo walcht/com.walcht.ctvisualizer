@@ -21,9 +21,9 @@
       "path": "Samples~/desktop"
     },
     {
-      "displayName": "XR CT Visualizer",
-      "description": "CT Visualizer sample for XR (e.g., Magic Leap 2, Occulus, etc.) target builds",
-      "path": "Samples~/xr"
+      "displayName": "XR MagicLeap2 CT Visualizer",
+      "description": "CT Visualizer XR sample for the Magic Leap 2 device target builds",
+      "path": "./Samples~/magicleap2"
     }
   ],
   "git-dependencies": [
