@@ -1,7 +1,10 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.XR.Interaction.Toolkit;
+using UnityEngine.XR.Interaction.Toolkit.Interactables;
 
 namespace UnityCTVisualizer {
+    [RequireComponent(typeof(XRSimpleInteractable))]
     public class VolumetricObjectController : MonoBehaviour {
         [Range(0.05f, 0.5f)]
         public float m_ScaleSpeed = 0.25f;
@@ -18,8 +21,8 @@ namespace UnityCTVisualizer {
         public float m_RotationSpeed = 40.0f;
 
         Transform m_Transform;
-        MagicLeapInputs m_InputLayer;
-        MagicLeapInputs.ControllerActions m_ControllerActions;
+        InputAction m_TrackpadAction;
+        XRSimpleInteractable m_SimpleInteractable;
 
         float m_ScaleSpeedModifier = 1;
         Vector3 m_OriginalScale;
@@ -27,12 +30,11 @@ namespace UnityCTVisualizer {
 
         void Awake() {
             m_Transform = GetComponent<Transform>();
-            m_InputLayer = new MagicLeapInputs();
+            m_SimpleInteractable = GetComponent<XRSimpleInteractable>();
+            m_TrackpadAction = InputSystem.actions.FindAction("Trackpad");
+            // m_SimpleInteractable.hoverEntered.AddListener(OnHoverEntered);
+            // m_SimpleInteractable.hoverExited.AddListener(OnHoverExited);
 
-            m_ControllerActions = new MagicLeapInputs.ControllerActions(m_InputLayer);
-
-            m_ControllerActions.TouchpadPosition.performed += OnScale;
-            
             /*
             m_InputLayer.VolumetricObjectControls.SlowScaleActivator.performed += (
                 InputAction.CallbackContext _
@@ -44,19 +46,18 @@ namespace UnityCTVisualizer {
 
             m_OriginalScale = m_Transform.localScale;
             m_MaxScaleVect = m_OriginalScale * m_MaxScale;
-
         }
 
         float t = 0.0f;
 
         void OnScale(InputAction.CallbackContext context) {
-            float scroll = context.ReadValue<float>();
-            if (scroll > 0) {
+            Vector2 scroll = context.ReadValue<Vector2>();
+            if (scroll.x > 0) {
                 t = Mathf.Clamp01(t + m_ScaleSpeed * m_ScaleSpeedModifier);
                 m_Transform.localScale = Vector3.Lerp(m_OriginalScale, m_MaxScaleVect, t);
             }
             // this has to be done because on linux we get 120, 0, -120
-            else if (scroll < 0) {
+            else if (scroll.x < 0) {
                 t = Mathf.Clamp01(t - m_ScaleSpeed * m_ScaleSpeedModifier);
                 m_Transform.localScale = Vector3.Lerp(m_OriginalScale, m_MaxScaleVect, t);
             }
@@ -68,12 +69,12 @@ namespace UnityCTVisualizer {
             }
         }
 
-        void OnEnable() {
-            m_InputLayer.Enable();
+        private void OnHoverEntered(HoverEnterEventArgs args) {
+            m_TrackpadAction.performed += OnScale;
         }
 
-        void OnDisable() {
-            m_InputLayer.Enable();
+        private void OnHoverExited(HoverExitEventArgs args) {
+            m_TrackpadAction.performed -= OnScale;
         }
     }
 }
