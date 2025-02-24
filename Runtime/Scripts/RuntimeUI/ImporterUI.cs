@@ -43,7 +43,7 @@ namespace UnityCTVisualizer {
 
         internal void PermissionCallbacks_PermissionDenied(string permissionName)
         {
-            throw new Exception($"permission to read from the file system was NOT granted. Aborting ...")
+            throw new Exception($"permission to read from the file system was NOT granted. Aborting ...");
         }
 #endif
 
