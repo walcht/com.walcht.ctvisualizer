@@ -45,3 +45,7 @@ TextureSubPlugin.dll
 TextureSubPlugin.dll.meta
 libTextureSubPlugin.so
 libTextureSubPlugin.so.meta
+
+# generated files
+MagicLeapOpenXRInput.cs
+MagicLeapOpenXRInput.cs.meta
