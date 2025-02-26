@@ -26,10 +26,19 @@
       "path": "./Samples~/magicleap2"
     }
   ],
+  "dependencies": {
+    "com.unity.xr.interaction.toolkit": "3.0.7",
+    "com.unity.xr.arfoundation": "6.0.5",
+    "com.unity.xr.openxr": "1.14.1"
+  },
   "git-dependencies": [
     {
       "name": "HSV Color Picker",
       "url": "https://github.com/walcht/com.walcht.vrcolorpicker.git"
+    },
+    {
+      "name": "Magic Leap SDK",
+      "url" : "https://github.com/magicleap/MagicLeapUnitySDK.git"
     }
   ]
 }
