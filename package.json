@@ -35,10 +35,6 @@
     {
       "name": "HSV Color Picker",
       "url": "https://github.com/walcht/com.walcht.vrcolorpicker.git"
-    },
-    {
-      "name": "Magic Leap SDK",
-      "url" : "https://github.com/magicleap/MagicLeapUnitySDK.git"
     }
   ]
 }
