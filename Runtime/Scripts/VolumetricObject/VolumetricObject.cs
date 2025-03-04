@@ -503,15 +503,14 @@ namespace UnityCTVisualizer {
                 nbr_bricks_uploaded += nbr_bricks_uploaded_per_frame;
 
                 // notify GC that it is free to manage previous frame's bricks
-                for (int i = 0; i < nbr_bricks_uploaded_per_frame; ++i)
-                    handles[i].Free();
+                for (int i = 0; i < nbr_bricks_uploaded_per_frame; ++i) handles[i].Free();
                 nbr_bricks_uploaded_per_frame = 0;
                 m_tex_params_pool.ReleaseAll();
 
-                // get bricks requested by GPU
+                // get bricks requested by GPU in this frame
                 int nbr_requested_bricks = GetGPUBrickRequests(ref brick_requests);
 
-                // import relevant chunks (again a chunk is a persistent memory unit while a brick is a GPU unit)
+                // import relevant chunks (a chunk is a persistent memory - disk - unit while a brick is a GPU unit)
                 ImportBricks(brick_requests, nbr_requested_bricks);
 
                 // upload requested bricks to the GPU from the bricks reply queue

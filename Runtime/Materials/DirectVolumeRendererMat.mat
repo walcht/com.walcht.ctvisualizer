@@ -40,9 +40,9 @@ Material:
     m_Ints: []
     m_Floats:
     - _AlphaCutoff: 0.99607843
-    - _MaxIterations: 2048
+    - _MaxIterations: 1024
     m_Colors:
-    - _BrickCacheTexSize: {r: 256, g: 384, b: 512, a: 0}
+    - _BrickCacheTexSize: {r: 1152, g: 768, b: 1920, a: 0}
     - _DensitiesTexSize: {r: 512, g: 512, b: 62, a: 0}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

@@ -54,6 +54,7 @@ float slabs(float3 origin, float3 dir, Box b) {
 ///
 Ray getRayFromBackface(float3 modelVertex) {
     Ray ray;
+    // convert from model space coordinate system to 3d texture space
     ray.origin = modelVertex + float3(0.5f, 0.5f, 0.5f);
 
     // get normalized ray direction in object space and in view space

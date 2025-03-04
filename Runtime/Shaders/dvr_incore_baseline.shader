@@ -35,14 +35,6 @@ Shader "UnityCTVisualizer/dvr_incore_baseline"
             float _MaxIterations;
             float3 _BrickCacheTexSize;
 
-            /// <summary>
-            ///     Samples the one dimensional transfer function texture for
-            ///     color and alpha.
-            /// </summary>
-            float4 sampleTF1DColor(float density) {
-                return tex2Dlod(_TFColors, float4(density, 0.0f, 0.0f, 0.0f));
-            }
-
             struct appdata {
                 float4 modelVertex: POSITION;
                 float2 uv: TEXCOORD0;
@@ -89,7 +81,7 @@ Shader "UnityCTVisualizer/dvr_incore_baseline"
                 for (int iter = 0; iter < num_iterations; ++iter)
                 {
                     float sampled_density = tex3Dlod(_BrickCache, float4(accm_ray, 0.0f)).r;
-                    float4 src = sampleTF1DColor(sampled_density);
+                    float4 src = tex2Dlod(_TFColors, float4(sampled_density, 0.0f, 0.0f, 0.0f));
                     // move to next sample point
                     accm_ray += delta_step;
                     // blending
