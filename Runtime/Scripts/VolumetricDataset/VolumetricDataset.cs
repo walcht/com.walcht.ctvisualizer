@@ -25,15 +25,9 @@ namespace UnityCTVisualizer {
         /////////////////////////////////
         // CONSTANTS
         /////////////////////////////////
-        // public readonly int MAX_NBR_BRICK_CACHE_TEXTURES = 8;
         public readonly long MIN_BRICK_SIZE = (long)Math.Pow(32, 3);
         public readonly long MAX_BRICK_SIZE = (long)Math.Pow(128, 3);
         public readonly long MAX_BRICKS_CACHE_NBR_BRICKS = 32768; // == 2048^3 / 32^3
-        public readonly long MAX_CACHE_USAGE_REPORTING_SIZE = 1024; // == 32768 / 32 of uint32 => 512 KB
-        public readonly int BRICK_CACHE_MISSES_WINDOW = 128 * 128;
-        public readonly int MEMORY_CACHE_MB = 4096;
-        public readonly int MAX_BRICK_UPLOADS_PER_FRAME = 10;
-        public float BRICK_CACHE_SIZE_MB;
 
         /////////////////////////////////
         // VISUALIZATION PARAMETERS
@@ -127,10 +121,10 @@ namespace UnityCTVisualizer {
         */
         public void ComputeVolumeOffset(UInt32 brick_id, int brick_size, out Int32 x, out Int32 y, out Int32 z) {
             int id = (int)(brick_id & 0x03FFFFFF);
-            int resolution_lvl = (int)(brick_id >> 26);
+            int res_lvl = (int)(brick_id >> 26);
             // transition to Unity's Texture3D coordinate system
-            int nbr_bricks_x = m_metadata.NbrChunksPerResolutionLvl[resolution_lvl].x * m_metadata.ChunkSize / brick_size;
-            int nbr_bricks_y = m_metadata.NbrChunksPerResolutionLvl[resolution_lvl].y * m_metadata.ChunkSize / brick_size;
+            int nbr_bricks_x = m_metadata.NbrChunksPerResolutionLvl[res_lvl].x * m_metadata.ChunkSize / brick_size;
+            int nbr_bricks_y = m_metadata.NbrChunksPerResolutionLvl[res_lvl].y * m_metadata.ChunkSize / brick_size;
             x = brick_size * (id % nbr_bricks_x);
             y = brick_size * ((id / nbr_bricks_x) % nbr_bricks_y);
             z = brick_size * (id / (nbr_bricks_x * nbr_bricks_y));

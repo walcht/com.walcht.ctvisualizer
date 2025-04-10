@@ -65,6 +65,8 @@ public class MemoryCache<T> where T : unmanaged {
         return e;
     }
 
+    public bool Contains(UInt32 id) => m_cache.ContainsKey(id);
+
     public int GetCapacity() => m_capacity;
 
     /// <summary>

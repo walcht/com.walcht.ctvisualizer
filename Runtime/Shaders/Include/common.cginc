@@ -28,8 +28,10 @@ struct Box {
 ///   algorithm. For an in-depth explanation, visit:
 ///   https://tavianator.com/2022/ray_box_boundary.html
 /// </summary>
+///
 /// <remark>
-///   This version may result in artifacts around the corners of the AABB.
+///     SLABS is can result in noise - consider adding a small epsilon
+///     and correctly setting the texture wrap mode.
 /// </remark>
 float slabs(float3 origin, float3 dir, Box b) {
     float3 inverseDir = 1.0f / dir;

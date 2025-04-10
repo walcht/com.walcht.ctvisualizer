@@ -10,7 +10,6 @@ Shader "UnityCTVisualizer/dvr_incore_baseline"
         // should be an int, but Unity crashes when calling Material.SetInteger()
         // see: https://discussions.unity.com/t/crash-when-calling-material-setinteger-with-int-shaderlab-properties/891920
         _MaxIterations("Maximum number of samples to take along longest path (cube diagonal)", float) = 512
-        [HideInInspector] _BrickCacheTexSize("Brick Cache 3D texture dimensions", Vector) = (1, 1, 1)
 	}
 
 	SubShader {
@@ -22,7 +21,7 @@ Shader "UnityCTVisualizer/dvr_incore_baseline"
 		Pass
 		{
 		    CGPROGRAM
-            #pragma multi_compile TEXTURE_RESHAPED_OFF TEXTURE_RESHAPED_ON
+            #pragma target 5.0
 			#pragma vertex vert
 			#pragma fragment frag
 
@@ -33,7 +32,6 @@ Shader "UnityCTVisualizer/dvr_incore_baseline"
             sampler2D _TFColors;
             float _AlphaCutoff;
             float _MaxIterations;
-            float3 _BrickCacheTexSize;
 
             struct appdata {
                 float4 modelVertex: POSITION;
