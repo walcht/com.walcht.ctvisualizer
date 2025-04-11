@@ -80,7 +80,7 @@ Material:
     - _MaxNbrBrickRequests: 16
     - _MaxNbrBrickRequestsPerRay: 4
     m_Floats:
-    - _AlphaCutoff: 0.945641
+    - _AlphaCutoff: 0.99607843
     - _BumpScale: 1
     - _Cutoff: 0.5
     - _DetailNormalMapScale: 1

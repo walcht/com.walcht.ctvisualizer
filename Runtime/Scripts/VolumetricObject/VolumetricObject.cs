@@ -883,7 +883,8 @@ namespace UnityCTVisualizer {
         public IEnumerator OOCPageTableOnlyLoop() {
 
             // make sure to only start when all dependencies are initialized
-            yield return new WaitUntil(() => (m_volume_dataset != null) && (m_transfer_function != null) && (m_brick_cache != null));
+            yield return new WaitUntil(() => (m_volume_dataset != null) && (m_transfer_function != null)
+                && (m_brick_cache != null));
 
             Debug.Log("started handling GPU brick requests");
 

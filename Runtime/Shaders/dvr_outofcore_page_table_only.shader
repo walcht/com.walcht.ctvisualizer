@@ -78,7 +78,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
             float4 _BrickCacheVoxelSize;
 
             int _BrickSize = 128;
-            float3 _BrickCacheNbrBricks;
+            int3 _BrickCacheNbrBricks;
 
             // index is the resolution level and (x, y, z) are the total number
             // of voxels of the volumetric dataset along each of its dimensions.
@@ -130,8 +130,6 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
             }
 
             int3 get_page_dir_offset(float3 p, int res_lvl) {
-                // return int3(p * _PageDirDims[res_lvl]);
-                // or
                 return int3((p * _VolumeDims[0]) / (_BrickSize << res_lvl));
             }
             
@@ -196,7 +194,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
                     // exploit spatial coherency to avoid expensive texture lookups
                     if ((res_lvl != prev_res_lvl) || any(page_dir_offset != prev_page_dir_offset)) {
 
-                        int4 page_dir_addrs = int4(/* _PageDirBase[res_lvl].xyz + */ page_dir_offset, 0);
+                        int4 page_dir_addrs = int4(_PageDirBase[res_lvl].xyz + page_dir_offset, 0);
                         page_dir_entry = _PageDir.Load(page_dir_addrs);
                         prev_page_dir_offset = page_dir_offset;
                         prev_res_lvl = res_lvl;
@@ -213,12 +211,10 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
                         sampled_density = tex3Dlod(_BrickCache, brick_pos).r;
 
                         // then report the brick cache usage for this frame
-                        float3 b =  _BrickSize / _BrickCacheDims;
-                        int brick_idx = round(
-                            (_BrickCacheNbrBricks.x * _BrickCacheNbrBricks.y * brick_pos.z / b.z) +
-                            (_BrickCacheNbrBricks.x * brick_pos.y / b.y) +
-                            (brick_pos.x / b.x)
-                        );
+                        int brick_idx =
+                            (_BrickCacheNbrBricks.x * _BrickCacheNbrBricks.y * round(page_dir_entry.z * _BrickCacheNbrBricks.z)) +
+                            (_BrickCacheNbrBricks.x * round(page_dir_entry.y * _BrickCacheNbrBricks.y)) +
+                            round(page_dir_entry.x * _BrickCacheNbrBricks.x);
                         // set to any value other than 0 to indicate that this brick cache slot was
                         // used in this frame
                         brick_cache_usage[brick_idx] = BRICK_CACHE_SLOT_USED;
@@ -248,9 +244,6 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
 
                     // advance to nex sample
                     t += step_size;
-
-                    /// REMOVE
-                    // accm_color = page_dir_entry;
 
                     // early-ray-termination optimization technique
                     if (accm_color.a > _AlphaCutoff) break;
