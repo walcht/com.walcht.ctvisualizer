@@ -282,14 +282,16 @@ namespace UnityCTVisualizer {
         ///     by .NET (i.e., 2GBs). No size checks are performed in this function.
         /// </remarks>
         public static void ImportBrick(CVDSMetadata metadata, UInt32 brick_id, int brick_size,
-            MemoryCache<byte> cache) {
+            MemoryCache<byte> cache, bool import_whole_chunk = false) {
             int resolution_lvl = (int)(brick_id >> 26);
             int chunk_id = BrickToChunkID(metadata, brick_id, brick_size);
             Vector3Int brick_offset_within_chunk = Importer.GetBrickOffsetWithinChunk(metadata, brick_id, brick_size);
             string chunk_fp = metadata.ChunkFilepaths[resolution_lvl][chunk_id];
             byte[] source_data = File.ReadAllBytes(chunk_fp);
+
             // TODO: add optimization for when chunk_size == brick_size
             long brick_size_cubed = brick_size * brick_size * brick_size;
+
             byte[] decompressed_data;
             if (metadata.Lz4Compressed) {
                 decompressed_data = new byte[metadata.DecompressedSizeInBytes * 2];
@@ -297,6 +299,10 @@ namespace UnityCTVisualizer {
             } else {
                 decompressed_data = source_data;
             }
+
+            if (import_whole_chunk) {
+            }
+
             byte[] data = new byte[brick_size_cubed];
             byte min = byte.MaxValue;
             byte max = byte.MinValue;
@@ -307,6 +313,12 @@ namespace UnityCTVisualizer {
                 min = Math.Min(min, data[i]);
                 max = Math.Max(max, data[i]);
             }
+
+            // avoid setting the costly data array in the memory cache
+            if (min == max) {
+                data = null;
+            }
+
             cache.Set(brick_id, new CacheEntry<byte>(data, min, max));
         }
 

@@ -38,9 +38,9 @@ namespace UnityCTVisualizer {
                 )
                 .GetComponent<VolumetricObject>();
 
-            m_VolumetricObject.Init(volumetric_dataset, args.Item2.rendering_mode,
+            m_VolumetricObject.Init(volumetric_dataset, args.Item2.brickSize, args.Item2.rendering_mode,
                 args.Item2.brick_cache_size, resolution_lvl: args.Item2.highestResolutionLvl,
-                nbr_brick_importer_threads: args.Item2.nbrImporterThreads,
+                max_nbr_brick_importer_threads: args.Item2.nbrImporterThreads,
                 cpu_memory_cache_mb: args.Item2.CPUBrickCacheSizeMB);
 
             m_VolumetricObject.enabled = true;

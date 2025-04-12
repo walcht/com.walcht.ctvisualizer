@@ -50,7 +50,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
 
             #define MAPPED_PAGE_TABLE_ENTRY 2
             #define UNMAPPED_PAGE_TABLE_ENTRY 1
-            #define EMPTY_PAGE_TABLE_ENTRY 0
+            #define HOMOGENEOUS_PAGE_TABLE_ENTRY 0
 
             // Visualization Parameters
             sampler3D _BrickCache;
@@ -203,27 +203,34 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
 
                     uint paging_flag = page_dir_entry.w;
 
-                    if ((paging_flag != UNMAPPED_PAGE_TABLE_ENTRY) && (paging_flag != EMPTY_PAGE_TABLE_ENTRY)) {
-
-                        float3 offset_within_brick = fmod(accm_ray * _VolumeDims[res_lvl], (float)_BrickSize)
-                            * _BrickCacheVoxelSize.xyz;
+                    if ((paging_flag != HOMOGENEOUS_PAGE_TABLE_ENTRY) && (paging_flag != UNMAPPED_PAGE_TABLE_ENTRY))
+                    {
+                        float3 offset_within_brick = fmod(accm_ray * _VolumeDims[res_lvl],
+                            (float)_BrickSize) * _BrickCacheVoxelSize.xyz;
                         float4 brick_pos = float4(page_dir_entry.xyz + offset_within_brick, 0);
                         sampled_density = tex3Dlod(_BrickCache, brick_pos).r;
 
                         // then report the brick cache usage for this frame
                         int brick_idx =
-                            (_BrickCacheNbrBricks.x * _BrickCacheNbrBricks.y * round(page_dir_entry.z * _BrickCacheNbrBricks.z)) +
+                            (_BrickCacheNbrBricks.x * _BrickCacheNbrBricks.y *
+                                round(page_dir_entry.z * _BrickCacheNbrBricks.z)) +
                             (_BrickCacheNbrBricks.x * round(page_dir_entry.y * _BrickCacheNbrBricks.y)) +
                             round(page_dir_entry.x * _BrickCacheNbrBricks.x);
-                        // set to any value other than 0 to indicate that this brick cache slot was
-                        // used in this frame
+                        // indicate that this brick cache slot was used in this frame
                         brick_cache_usage[brick_idx] = BRICK_CACHE_SLOT_USED;
-
                     }
 
-                    if (paging_flag == UNMAPPED_PAGE_TABLE_ENTRY) {
+                    else if (paging_flag == HOMOGENEOUS_PAGE_TABLE_ENTRY)
+                    {
+                        return fixed4(0.0f, 0.0f, 1.0f, 1.0f);
+                        // skip the empty page directory entry
+                        t += step_size; // skip_page_directory_entry(accm_ray, ray.dir, res_lvl) + epsilon;
+                        sampled_density = page_dir_entry.x / 255.0f;
+                    }
 
-                        // skip the unmapped and/or empty page directory entry
+                    else
+                    {
+                        // skip the empty unammped directory entry
                         t += step_size; // skip_page_directory_entry(accm_ray, ray.dir, res_lvl) + epsilon;
 
                         // try to report brick request
@@ -234,7 +241,6 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
                         
                         // continue because there is nothing to be sampled
                         continue;
-
                     }
 
                     // apply transfer function and composition

@@ -59,11 +59,11 @@ namespace UnityCTVisualizer {
         private int m_octree_start_depth = 0;
         private readonly int MAX_NBR_BRICK_REQUESTS_PER_RAY = 4;
         private readonly int MAX_NBR_BRICK_REQUESTS_PER_FRAME = 16;
-        private readonly int MAX_NBR_BRICK_UPLOADS_PER_FRAME = 16;
+        private readonly int MAX_NBR_BRICK_UPLOADS_PER_FRAME = 4;
         private readonly UInt32 INVALID_BRICK_ID = 0x80000000;
         private readonly UInt16 MAPPED_PAGE_TABLE_ENTRY = 2;
         private readonly UInt16 UNMAPPED_PAGE_TABLE_ENTRY = 1;
-        private readonly UInt16 EMPTY_PAGE_TABLE_ENTRY = 0;
+        private readonly UInt16 HOMOGENEOUS_PAGE_TABLE_ENTRY = 0;
 
 
         private VolumetricDataset m_volume_dataset = null;
@@ -84,7 +84,7 @@ namespace UnityCTVisualizer {
         private byte[] m_brick_requests_random_tex_data;
         private TextureFormat m_brick_cache_format;
         private int m_tex_plugin_format;
-        private int m_brick_size = 128;
+        private int m_brick_size;
         private int m_resolution_lvl;  // only for in-core rendering
         private float MM_TO_METERS = 0.001f;
 
@@ -183,6 +183,8 @@ namespace UnityCTVisualizer {
         private Material m_material;
         private CVDSMetadata m_metadata;
         private Vector4[] m_nbr_bricks_per_res_lvl;
+        private int m_nbr_brick_importer_threads = -1;
+
 
         /////////////////////////////////
         // DEBUGGING
@@ -198,21 +200,23 @@ namespace UnityCTVisualizer {
         }
 
 
-        public void Init(VolumetricDataset volumetricDataset, RenderingMode rendering_mode,
+        public void Init(VolumetricDataset volumetricDataset, int brick_size, RenderingMode rendering_mode,
             Vector3Int brick_cache_size, int resolution_lvl = 0, int cpu_memory_cache_mb = 4096,
-            int nbr_brick_importer_threads = -1) {
+            int max_nbr_brick_importer_threads = -1) {
 
             if (volumetricDataset == null)
                 throw new ArgumentNullException("the provided volumetric dataset should be a non-null reference");
 
+            m_brick_size = brick_size;
             m_rendering_mode = rendering_mode;
             m_volume_dataset = volumetricDataset;
             m_metadata = volumetricDataset.Metadata;
             m_resolution_lvl = resolution_lvl;
+            m_nbr_brick_importer_threads = max_nbr_brick_importer_threads;
 
             m_brick_cache_format = TextureFormat.R8;
             m_tex_plugin_format = (int)TextureSubPlugin.Format.UR8;
-            m_cpu_cache = new MemoryCache<byte>(cpu_memory_cache_mb, (int)Math.Pow(m_brick_size, 3));
+            m_cpu_cache = new MemoryCache<byte>(cpu_memory_cache_mb, m_brick_size * m_brick_size * m_brick_size);
 
             switch (m_rendering_mode) {
 
@@ -240,7 +244,7 @@ namespace UnityCTVisualizer {
                     ProgressHandlerEvents.OnRequestActivate?.Invoke(true);
                     Task t = Task.Run(() => {
                         Importer.LoadAllBricksIntoCache(m_volume_dataset.Metadata, m_brick_size, m_resolution_lvl,
-                            m_cpu_cache, m_brick_reply_queue);
+                            m_cpu_cache, m_brick_reply_queue, m_nbr_brick_importer_threads);
                     });
                     t.ContinueWith(t => { Debug.LogException(t.Exception); }, TaskContinuationOptions.OnlyOnFaulted);
 
@@ -506,7 +510,7 @@ namespace UnityCTVisualizer {
 
         private void InitializeBrickRequestsBuffer() {
 
-            m_brick_requests_cb = new ComputeBuffer(MAX_NBR_BRICK_REQUESTS_PER_FRAME, Marshal.SizeOf<UInt32>(),
+            m_brick_requests_cb = new ComputeBuffer(MAX_NBR_BRICK_REQUESTS_PER_FRAME, sizeof(UInt32),
                 ComputeBufferType.Default);
             m_brick_requests_default_data = new UInt32[MAX_NBR_BRICK_REQUESTS_PER_FRAME];
             for (int i = 0; i < MAX_NBR_BRICK_REQUESTS_PER_FRAME; ++i) {
@@ -590,8 +594,7 @@ namespace UnityCTVisualizer {
 
 
         /// <summary>
-        ///     Initializes the top level page directory with other optional
-        ///     intermediary page tables.
+        ///     Initializes the top level page directory with other optional intermediary page tables.
         /// </summary>
         /// 
         /// <exception cref="Exception">
@@ -617,8 +620,8 @@ namespace UnityCTVisualizer {
                 m_page_dir_data[i + 3] = UNMAPPED_PAGE_TABLE_ENTRY;
             }
 
-            if (!SystemInfo.SupportsTextureFormat(TextureFormat.RGBA64)) {
-                throw new Exception("your system does not support RGBA64 - uint_16 per channel texture format.");
+            if (!SystemInfo.SupportsTextureFormat(TextureFormat.RGBAFloat)) {
+                throw new Exception("your system does not support RGBAFloat - float32 per channel texture format.");
             }
 
             m_page_dir = new Texture3D(page_dir_dims.x, page_dir_dims.y, page_dir_dims.z,
@@ -850,7 +853,8 @@ namespace UnityCTVisualizer {
         /// <param name="filtered_brick_ids">
         ///     This is where filtered bricks are saved. Used to avoid array allocations.
         /// </param>
-        private void ImportBricksIntoMemoryCache(UInt32[] brick_ids, UInt32[] filtered_brick_ids) {
+        private void ImportBricksIntoMemoryCache(UInt32[] brick_ids, UInt32[] filtered_brick_ids,
+             int nbr_importer_threads = -1) {
             // first cleanup the brick requests list (remove duplicates, invalid IDs,
             // bricks already in cache, and bricks that are currently being loaded)
             int count = 0;
@@ -865,12 +869,15 @@ namespace UnityCTVisualizer {
                 }
             }
 
+            int nbr_threads = nbr_importer_threads > 0 ? nbr_importer_threads :
+                Math.Max(Environment.ProcessorCount - 2, 1);
+
             Task t = Task.Run(() => {
                 Parallel.For(0, count, new ParallelOptions() {
-                    TaskScheduler = new LimitedConcurrencyLevelTaskScheduler(1)
+                    TaskScheduler = new LimitedConcurrencyLevelTaskScheduler(nbr_threads)
                 }, i => {
                     UInt32 brick_id = filtered_brick_ids[i];
-                    Importer.ImportBrick(m_volume_dataset.Metadata, brick_id, m_brick_size, m_cpu_cache);
+                    Importer.ImportBrick(m_metadata, brick_id, m_brick_size, m_cpu_cache);
                     m_in_flight_brick_imports.Remove(brick_id, out byte _);
                     m_brick_reply_queue.Enqueue(brick_id);
                 });
@@ -880,6 +887,10 @@ namespace UnityCTVisualizer {
 
         private bool IsBrickCacheSlotEmpty(BrickCacheUsage slot) => slot.brick_id == INVALID_BRICK_ID;
 
+        /// <summary>
+        ///     Out-of-core virtual memory loop. This loop handles on-demand GPU brick requests,
+        ///     manages the different caches, and synchronizes CPU-GPU resources.
+        /// </summary>
         public IEnumerator OOCPageTableOnlyLoop() {
 
             // make sure to only start when all dependencies are initialized
@@ -906,6 +917,8 @@ namespace UnityCTVisualizer {
                 // wait until current frame rendering is done ...
                 yield return new WaitForEndOfFrame();
 
+                bool page_directory_dity = false;
+
                 // we can safely assume that bricks uploaded to GPU in previous frame are done
                 nbr_bricks_uploaded += nbr_bricks_uploaded_per_frame;
 
@@ -917,7 +930,7 @@ namespace UnityCTVisualizer {
                 // get bricks requested by GPU in this frame and import them into bricks memory cache
                 GPUGetBrickRequests(brick_requests);
                 GPUResetBrickRequestsBuffer();
-                ImportBricksIntoMemoryCache(brick_requests, _filtered_brick_requests);
+                ImportBricksIntoMemoryCache(brick_requests, _filtered_brick_requests, m_nbr_brick_importer_threads);
 
                 // update CPU brick cache usage and reset it on the GPU
                 CPUUpdateBrickCacheUsageBuffer();
@@ -928,6 +941,22 @@ namespace UnityCTVisualizer {
                     nbr_bricks_uploaded_per_frame < MAX_NBR_BRICK_UPLOADS_PER_FRAME &&
                     m_brick_reply_queue.TryDequeue(out UInt32 brick_id)
                 ) {
+
+                    // we are sending a managed object to unmanaged thread (i.e., C++) the object has to be pinned
+                    // to a fixed location in memory during the plugin call
+                    var brick = m_cpu_cache.Get(brick_id);
+                    Assert.IsNotNull(brick);
+
+                    // in case the brick is homogeneous, avoid adding it the cache and just update the
+                    // corresponding page entry
+                    if (brick.min == brick.max) {
+                        page_directory_dity = true;
+                        UpdatePageTablesHomogeneousBrick(brick_id, brick.min);
+                        Debug.Log($"brick {brick_id} is homogeneous with val: {brick.min}");
+                        continue;
+                    }
+
+                    handles[nbr_bricks_uploaded_per_frame] = GCHandle.Alloc(brick.data, GCHandleType.Pinned);
 
                     // LRU cache eviction scheme; pick least recently used brick cache slot
                     int brick_cache_idx = m_brick_cache_usage_sorted[nbr_bricks_uploaded_per_frame].brick_cache_idx;
@@ -944,12 +973,6 @@ namespace UnityCTVisualizer {
                     brick_cache_added_slots.Add(added_slot);
                     m_brick_cache_usage[brick_cache_idx] = added_slot;
                     GetBrickCacheSlotPosition(brick_cache_idx, out Vector3Int brick_cache_slot_pos);
-
-                    // we are sending a managed object to unmanaged thread (i.e., C++) the object has to be pinned to a
-                    // fixed location in memory during the plugin call
-                    var brick = m_cpu_cache.Get(brick_id);
-                    Assert.IsNotNull(brick);
-                    handles[nbr_bricks_uploaded_per_frame] = GCHandle.Alloc(brick.data, GCHandleType.Pinned);
 
                     // allocate the plugin call's arguments struct
                     TextureSubImage3DParams args = new() {
@@ -979,9 +1002,9 @@ namespace UnityCTVisualizer {
                 Graphics.ExecuteCommandBuffer(cmd_buffer);
                 cmd_buffer.Clear();
 
-                if ((brick_cache_added_slots.Count > 0) || (brick_cache_evicted_slots.Count > 0)) {
-                    // make sure to update the brick cache bricks residency HashSet before updating the residency octree!
-                    UpdateBrickCacheResidencyHashSet(brick_cache_added_slots, brick_cache_evicted_slots);
+                if (page_directory_dity || (brick_cache_added_slots.Count > 0)
+                    || (brick_cache_evicted_slots.Count > 0)) {
+
                     GPUUpdatePageTables(brick_cache_added_slots, brick_cache_evicted_slots);
 
                     if (InstantiateBrickWireframes) {
@@ -992,10 +1015,11 @@ namespace UnityCTVisualizer {
                             Destroy(transform.Find($"brick_{evicted_slot.brick_id & 0x03FFFFFF}_res_lvl_{evicted_slot.brick_id >> 26}").gameObject);
                         }
                     }
-                }
 
-                brick_cache_added_slots.Clear();
-                brick_cache_evicted_slots.Clear();
+                    brick_cache_added_slots.Clear();
+                    brick_cache_evicted_slots.Clear();
+
+                }
 
                 // increase timestamp
                 ++m_timestamp;
@@ -1004,6 +1028,11 @@ namespace UnityCTVisualizer {
 
         }  // END COROUTINE
 
+
+        /// <summary>
+        ///     Out-of-core hybrid (i.e., virtual memory and octree acceleration structure) loop. This loop handles
+        ///     on-demand GPU brick requests, manages the different caches, and synchronizes CPU-GPU resources.
+        /// </summary>
         public IEnumerator OOCHybridLoop() {
 
             // make sure to only start when all dependencies are initialized
@@ -1108,7 +1137,7 @@ namespace UnityCTVisualizer {
                             OOCAddBrickWireframeObject(added_slot.brick_id);
                         }
                         foreach (var evicted_slot in brick_cache_evicted_slots) {
-                            GameObject.Destroy(transform.Find($"brick_{evicted_slot.brick_id & 0x03FFFFFF}_res_lvl_{evicted_slot.brick_id >> 26}"));
+                            Destroy(transform.Find($"brick_{evicted_slot.brick_id & 0x03FFFFFF}_res_lvl_{evicted_slot.brick_id >> 26}").gameObject);
                         }
                     }
                 }
@@ -1416,7 +1445,6 @@ namespace UnityCTVisualizer {
             bool dirty = false;
 
             foreach (var added_slot in added_slots) {
-
                 int idx = GetPageTableIndex(added_slot.brick_id) * 4;
                 GetBrickCacheSlotPosition(added_slot.brick_cache_idx, out Vector3 pos);
                 m_page_dir_data[idx] = pos.x;
@@ -1428,8 +1456,7 @@ namespace UnityCTVisualizer {
             }
 
             foreach (var evicted_slot in evicted_slots) {
-
-                int idx = GetPageTableIndex(evicted_slot.brick_id);
+                int idx = GetPageTableIndex(evicted_slot.brick_id) * 4;
                 // set the alpha component to UNMAPPED so the shader knows
                 m_page_dir_data[idx + 3] = UNMAPPED_PAGE_TABLE_ENTRY;
                 dirty = true;
@@ -1441,6 +1468,14 @@ namespace UnityCTVisualizer {
                 m_page_dir.Apply();
             }
 
+        }
+
+        private void UpdatePageTablesHomogeneousBrick(UInt32 brick_id, byte val) {
+            int idx = GetPageTableIndex(brick_id) * 4;
+            // x channel has to be set to the homogeneous value
+            // on the shader side, do (page_entry.x / 255.0f) to convert to the correct value
+            m_page_dir_data[idx] = val;
+            m_page_dir_data[idx + 3] = HOMOGENEOUS_PAGE_TABLE_ENTRY;
         }
 
         private void UpdateBrickCacheResidencyHashSet(List<BrickCacheUsage> added_slots, List<BrickCacheUsage> evicted_slots) {
