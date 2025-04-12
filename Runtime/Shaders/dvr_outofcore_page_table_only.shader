@@ -13,7 +13,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
 	    [HideInInspector] _BrickCache("Brick Cache", 3D) = "" {}
         [HideInInspector] _TFColors("Transfer Function Colors Texture", 2D) = "" {}
         [HideInInspector] _PageDir("Top level multi-resolution page directory", 3D) = "" {}
-        _BrickRequestsRandomTex("Brick requests random (uniform) texture", 2D) = "" {}
+        _BrickRequestsRandomTex("Brick requests random (uniform) texture", 2D) = "white" {}
 		_AlphaCutoff("Opacity Cutoff", Range(0.0, 1.0)) = 0.95
         _MaxIterations("Maximum number of samples to take along longest path (cube diagonal) [type: int]", float) = 512
         _VolumeTexelSize("Size of one voxel (or texel) in the volumetric dataset", Vector) = (1, 1, 1)
@@ -56,7 +56,11 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
             sampler3D _BrickCache;
             // TODO: use one sampler for these 2D textures
             sampler2D _TFColors;
+
             sampler2D _BrickRequestsRandomTex;
+            float4 _BrickRequestsRandomTex_ST;
+
+
             float _AlphaCutoff;
             float _MaxIterations;
 
@@ -159,7 +163,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
 
                 output.clipVertex = UnityObjectToClipPos(v.modelVertex);
-                output.uv = v.uv;
+                output.uv = TRANSFORM_TEX(v.uv, _BrickRequestsRandomTex);
                 output.modelVertex = v.modelVertex.xyz;
                 return output;
             }
@@ -233,6 +237,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
                         // skip the empty unammped directory entry
                         t += step_size; // skip_page_directory_entry(accm_ray, ray.dir, res_lvl) + epsilon;
 
+                        // TODO: only report brick request if it is not the same as last one
                         // try to report brick request
                         if (nbr_requested_bricks < _MaxNbrBrickRequestsPerRay) {
                            requests[nbr_requested_bricks] = getBrickID(accm_ray, res_lvl);
@@ -256,10 +261,15 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
 
                 }  // END ray sampling loop
 
-                if (nbr_requested_bricks > 0) {
+                if (nbr_requested_bricks > 0)
+                {
+                    // report all the saved brick requests along the ray - sampled random value belongs to [0.0, 1.0[
+                    int r = (int)(tex2Dlod(_BrickRequestsRandomTex, float4(interpolated.uv, 0.0f, 0.0f)).r
+                        * _MaxNbrBrickRequests / _MaxNbrBrickRequestsPerRay) * _MaxNbrBrickRequestsPerRay;
+
                     // report all the saved brick requests along the ray - sampled random value belongs to [0.0, 1.0[
                     for (int k = 0; k < nbr_requested_bricks; ++k) {
-                        brick_requests[k] = requests[k];
+                        brick_requests[r + k] = requests[k];
                     }
                 }
 

@@ -10,28 +10,34 @@ using K4os.Compression.LZ4;
 using Newtonsoft.Json;
 using UnityEngine;
 
-namespace UnityCTVisualizer {
-    public enum ColorDepth {
+namespace UnityCTVisualizer
+{
+    public enum ColorDepth
+    {
         UINT8
     }
 
-    public enum DownsamplingInterpolation {
+    public enum DownsamplingInterpolation
+    {
         TRILINEAR
     }
 
-    [StructLayout(LayoutKind.Sequential, Size=20)]
-    public struct ResidencyNode {
-         public float center_x;     // 4 bytes
-         public float center_y;     // 4 bytes
-         public float center_z;     // 4 bytes
-         public float side_halved;  // 4 bytes
-         public uint data;          // 4 bytes
+    [StructLayout(LayoutKind.Sequential, Size = 20)]
+    public struct ResidencyNode
+    {
+        public float center_x;     // 4 bytes
+        public float center_y;     // 4 bytes
+        public float center_z;     // 4 bytes
+        public float side_halved;  // 4 bytes
+        public uint data;          // 4 bytes
     }
 
 
-    public class CVDSMetadata {
+    public class CVDSMetadata
+    {
 
-        internal class CVDSMetadataInternal {
+        internal class CVDSMetadataInternal
+        {
             [JsonProperty("original_dims")]
             public int[] OriginalDims { get; set; }
 
@@ -65,27 +71,33 @@ namespace UnityCTVisualizer {
             public float[] EulerRotation { get; set; }
         }
 
-        public CVDSMetadata(string root_fp) {
+        public CVDSMetadata(string root_fp)
+        {
             string metadata_fp = Path.Join(root_fp, "metadata.json");
-            if (!Directory.Exists(root_fp)) {
+            if (!Directory.Exists(root_fp))
+            {
                 throw new Exception($"provided CVDS directory path is not a valide directory path: {root_fp}");
             }
-            if (!File.Exists(metadata_fp)) {
+            if (!File.Exists(metadata_fp))
+            {
                 throw new Exception($"metadata.json file was not found in provided CVDS directory: {root_fp}");
             }
             bool deserializationError = false;
             StringBuilder error_sb = new();
             CVDSMetadataInternal metadata = JsonConvert.DeserializeObject<CVDSMetadataInternal>(
                 File.ReadAllText(metadata_fp),
-                new JsonSerializerSettings {
-                  Error = (object sender, Newtonsoft.Json.Serialization.ErrorEventArgs args) => {
-                    error_sb.Append(args.ErrorContext.Error.Message);
-                    args.ErrorContext.Handled = true;
-                    deserializationError = true;
-                  }
+                new JsonSerializerSettings
+                {
+                    Error = (object sender, Newtonsoft.Json.Serialization.ErrorEventArgs args) =>
+                    {
+                        error_sb.Append(args.ErrorContext.Error.Message);
+                        args.ErrorContext.Handled = true;
+                        deserializationError = true;
+                    }
                 });
-            if (deserializationError) {
-              throw new Exception(error_sb.ToString());
+            if (deserializationError)
+            {
+                throw new Exception(error_sb.ToString());
             }
 
             // assign metadata properties/attributes
@@ -109,12 +121,15 @@ namespace UnityCTVisualizer {
 
             DecompressedSizeInBytes = metadata.DecompressedChunkSizeInBytes;
 
-            switch (metadata.ColorDepth) {
-                case 8: {
+            switch (metadata.ColorDepth)
+            {
+                case 8:
+                {
                     ColorDepth = ColorDepth.UINT8;
                     break;
                 }
-                default: {
+                default:
+                {
                     throw new Exception($"unsupported/invalid color depth value: {metadata.ColorDepth}");
                 }
             }
@@ -130,14 +145,15 @@ namespace UnityCTVisualizer {
             if (metadata.EulerRotation.Length != 3)
                 throw new Exception($"invalid Euler rotation length {metadata.EulerRotation.Length}. Expected 3");
             EulerRotation = new Vector3(metadata.EulerRotation[0], metadata.EulerRotation[1], metadata.EulerRotation[2]);
-            
+
             if (metadata.NbrChunksPerResolutionLvl.Length != metadata.NbrResolutionLvls)
                 throw new Exception($"invalid number chunks per resolution level length {metadata.NbrChunksPerResolutionLvl.Length}");
             NbrChunksPerResolutionLvl = new Vector3Int[metadata.NbrChunksPerResolutionLvl.Length];
 
-            for (int i = 0; i < metadata.NbrChunksPerResolutionLvl.Length; ++i) {
+            for (int i = 0; i < metadata.NbrChunksPerResolutionLvl.Length; ++i)
+            {
                 if (metadata.NbrChunksPerResolutionLvl[i].Length != 3)
-                  throw new Exception($"invalid number chunks per resolution level entry. Expected 3 elements");
+                    throw new Exception($"invalid number chunks per resolution level entry. Expected 3 elements");
                 NbrChunksPerResolutionLvl[i] = new Vector3Int(metadata.NbrChunksPerResolutionLvl[i][0],
                     metadata.NbrChunksPerResolutionLvl[i][1],
                     metadata.NbrChunksPerResolutionLvl[i][2]);
@@ -145,12 +161,14 @@ namespace UnityCTVisualizer {
 
             // assign chunk filepaths for each resolution level
             ChunkFilepaths = new string[NbrResolutionLvls + 1][];
-            for (int res_lvl = 0; res_lvl < NbrResolutionLvls; ++res_lvl) {
+            for (int res_lvl = 0; res_lvl < NbrResolutionLvls; ++res_lvl)
+            {
                 string res_directory = Path.Join(RootFilepath, $"resolution_level_{res_lvl}");
                 int nbr_chunks = NbrChunksPerResolutionLvl[res_lvl].x * NbrChunksPerResolutionLvl[res_lvl].y
                     * NbrChunksPerResolutionLvl[res_lvl].z;
                 string[] chunk_fps = new string[nbr_chunks];
-                for (int chunk_id = 0; chunk_id < nbr_chunks; ++chunk_id) {
+                for (int chunk_id = 0; chunk_id < nbr_chunks; ++chunk_id)
+                {
                     string chunk_fp;
                     if (!Lz4Compressed)
                         chunk_fp = Path.Join(res_directory, $"chunk_{chunk_id}.cvds");
@@ -163,10 +181,13 @@ namespace UnityCTVisualizer {
                 ChunkFilepaths[res_lvl] = chunk_fps;
             }
 
-            try {
-              DownsamplingInter = (DownsamplingInterpolation)Enum.Parse(typeof(DownsamplingInterpolation), metadata.DownsamplingInter.ToUpper());
-            } catch (Exception e) {
-              throw new Exception($"invalid downsampling interpolation value {metadata.DownsamplingInter}. {e.Message}");
+            try
+            {
+                DownsamplingInter = (DownsamplingInterpolation)Enum.Parse(typeof(DownsamplingInterpolation), metadata.DownsamplingInter.ToUpper());
+            }
+            catch (Exception e)
+            {
+                throw new Exception($"invalid downsampling interpolation value {metadata.DownsamplingInter}. {e.Message}");
             }
         }
 
@@ -234,13 +255,16 @@ namespace UnityCTVisualizer {
 
     }
 
-    public static class Importer {
+    public static class Importer
+    {
 
-        public static CVDSMetadata ImportMetadata(string dataset_path) {
+        public static CVDSMetadata ImportMetadata(string dataset_path)
+        {
             return new CVDSMetadata(dataset_path);
         }
 
-        public static int BrickToChunkID(CVDSMetadata metadata, UInt32 brick_id, int brick_size) {
+        public static int BrickToChunkID(CVDSMetadata metadata, UInt32 brick_id, int brick_size)
+        {
             int id = (int)(brick_id & 0x03FFFFFF);
             int resolution_lvl = (int)(brick_id >> 26);
             Vector3Int nbr_chunks = metadata.NbrChunksPerResolutionLvl[resolution_lvl];
@@ -251,7 +275,8 @@ namespace UnityCTVisualizer {
             return chunk_id;
         }
 
-        public static Vector3Int GetBrickOffsetWithinChunk(CVDSMetadata metadata, UInt32 brick_id, int brick_size) {
+        public static Vector3Int GetBrickOffsetWithinChunk(CVDSMetadata metadata, UInt32 brick_id, int brick_size)
+        {
             int id = (int)(brick_id & 0x03FFFFFF);
             int resolution_lvl = (int)(brick_id >> 26);
             Vector3Int nbr_chunks = metadata.NbrChunksPerResolutionLvl[resolution_lvl];
@@ -262,7 +287,8 @@ namespace UnityCTVisualizer {
             return new Vector3Int(offset_x, offset_y, offset_z);
         }
 
-        public static int GetBytearrayOffset(int i, int x, int y, int z, int c, int b, int bpc) {
+        public static int GetBytearrayOffset(int i, int x, int y, int z, int c, int b, int bpc)
+        {
             return (z * c * c + (y + (i / b) % b + (i / (b * b)) * c) * c + x + i % b) * bpc;
         }
 
@@ -282,7 +308,8 @@ namespace UnityCTVisualizer {
         ///     by .NET (i.e., 2GBs). No size checks are performed in this function.
         /// </remarks>
         public static void ImportBrick(CVDSMetadata metadata, UInt32 brick_id, int brick_size,
-            MemoryCache<byte> cache, bool import_whole_chunk = false) {
+            MemoryCache<byte> cache, bool import_whole_chunk = false)
+        {
             int resolution_lvl = (int)(brick_id >> 26);
             int chunk_id = BrickToChunkID(metadata, brick_id, brick_size);
             Vector3Int brick_offset_within_chunk = Importer.GetBrickOffsetWithinChunk(metadata, brick_id, brick_size);
@@ -290,23 +317,42 @@ namespace UnityCTVisualizer {
             byte[] source_data = File.ReadAllBytes(chunk_fp);
 
             // TODO: add optimization for when chunk_size == brick_size
-            long brick_size_cubed = brick_size * brick_size * brick_size;
+            int brick_size_cubed = brick_size * brick_size * brick_size;
+            int decompressed_size =  metadata.ChunkSize * metadata.ChunkSize * metadata.ChunkSize;
 
             byte[] decompressed_data;
-            if (metadata.Lz4Compressed) {
-                decompressed_data = new byte[metadata.DecompressedSizeInBytes * 2];
-                LZ4Codec.Decode(source: source_data, target: decompressed_data);
-            } else {
+            if (metadata.Lz4Compressed)
+            {
+                decompressed_data = new byte[decompressed_size];
+
+                int res = LZ4Codec.Decode(
+                    source_data, 0, source_data.Length,
+                    decompressed_data, 0, decompressed_data.Length
+                );
+
+                if (res != decompressed_size)
+                {
+                    throw new Exception("chunk decompression failed. " +
+                        $"Unexpected decompressed data size: {res} != {decompressed_size}");
+                }
+            }
+            else
+            {
                 decompressed_data = source_data;
             }
 
-            if (import_whole_chunk) {
+
+
+            if (import_whole_chunk)
+            {
+                // TODO: implement this
             }
 
             byte[] data = new byte[brick_size_cubed];
             byte min = byte.MaxValue;
             byte max = byte.MinValue;
-            for (int i = 0; i < brick_size_cubed; ++i) {
+            for (int i = 0; i < brick_size_cubed; ++i)
+            {
                 int j = Importer.GetBytearrayOffset(i, brick_offset_within_chunk.x, brick_offset_within_chunk.y,
                     brick_offset_within_chunk.z, metadata.ChunkSize, brick_size, sizeof(byte));
                 data[i] = decompressed_data[j];
@@ -315,7 +361,8 @@ namespace UnityCTVisualizer {
             }
 
             // avoid setting the costly data array in the memory cache
-            if (min == max) {
+            if (min == max)
+            {
                 data = null;
             }
 
@@ -323,13 +370,14 @@ namespace UnityCTVisualizer {
         }
 
         public static void LoadAllBricksIntoCache(CVDSMetadata metadata, int brick_size, int resolution_lvl,
-            MemoryCache<byte> cache, ConcurrentQueue<UInt32> brick_reply_queue, int nbr_importer_threads = -1) {
+            MemoryCache<byte> cache, ConcurrentQueue<UInt32> brick_reply_queue, int nbr_importer_threads = -1)
+        {
             Stopwatch stopwatch = Stopwatch.StartNew();
             long total_nbr_bricks = metadata.NbrChunksPerResolutionLvl[resolution_lvl].x *
                 metadata.NbrChunksPerResolutionLvl[resolution_lvl].y *
                 metadata.NbrChunksPerResolutionLvl[resolution_lvl].z *
                 (int)Math.Pow(metadata.ChunkSize / brick_size, 3);
-            
+
             // update progress bar UI value and message
             ProgressHandlerEvents.OnRequestMaxProgressValueUpdate?.Invoke((int)total_nbr_bricks);
             ProgressHandlerEvents.OnRequestProgressMessageUpdate?.Invoke($"uploading {total_nbr_bricks} bricks to host memory cache ...");
@@ -338,9 +386,11 @@ namespace UnityCTVisualizer {
                 Math.Max(Environment.ProcessorCount - 2, 1);
 
             UnityEngine.Debug.Log($"uploading {total_nbr_bricks} bricks to host memory cache ...");
-            Parallel.For(0, total_nbr_bricks, new ParallelOptions() {
+            Parallel.For(0, total_nbr_bricks, new ParallelOptions()
+            {
                 TaskScheduler = new LimitedConcurrencyLevelTaskScheduler(nbr_threads)
-            }, i => {
+            }, i =>
+            {
                 UInt32 brick_id = (UInt32)i | (UInt32)resolution_lvl << 26;
                 ImportBrick(metadata, brick_id, brick_size, cache);
                 brick_reply_queue.Enqueue(brick_id);
@@ -353,38 +403,55 @@ namespace UnityCTVisualizer {
         }
 
         public static void GenerateHomogeneousBrick<T>(UInt32 brick_id, int brick_size, T fill_value,
-            MemoryCache<T> cache) where T : unmanaged {
+            MemoryCache<T> cache) where T : unmanaged
+        {
             long brick_size_cubed = brick_size * brick_size * brick_size;
             T[] data = new T[brick_size_cubed];
-            for (int i = 0; i < brick_size_cubed; ++i) {
+            for (int i = 0; i < brick_size_cubed; ++i)
+            {
                 data[i] = fill_value;
             }
             cache.Set(brick_id, new CacheEntry<T>(data, fill_value, fill_value));
         }
 
         public static void GenerateGradientBrick(UInt32 brick_id, int brick_size, byte v0, byte v1,
-            MemoryCache<byte> cache) {
+            MemoryCache<byte> cache)
+        {
             long brick_size_cubed = brick_size * brick_size * brick_size;
             byte[] data = new byte[brick_size_cubed];
-            for (int i = 0; i < brick_size_cubed; ++i) {
+            for (int i = 0; i < brick_size_cubed; ++i)
+            {
                 float t = (float)(i / (brick_size * brick_size)) / (brick_size - 1);
                 data[i] = (byte)((1 - t) * v0 + t * v1);
             }
             cache.Set(brick_id, new CacheEntry<byte>(data, Math.Min(v0, v1), Math.Max(v0, v1)));
         }
 
-        public static List<ResidencyNode> ImportResidencyOctree(CVDSMetadata metadata) {
+        public static List<ResidencyNode> ImportResidencyOctree(CVDSMetadata metadata)
+        {
             string fp = Path.Join(metadata.RootFilepath, "residency_octree.bin");
             byte[] source_data = File.ReadAllBytes(fp);
             List<ResidencyNode> data = new List<ResidencyNode>();
-            for (int i = 0; i < source_data.Length; ) {
-                float center_x = BitConverter.ToSingle(source_data, i); i += 4;
-                float center_y = BitConverter.ToSingle(source_data, i); i += 4;
-                float center_z = BitConverter.ToSingle(source_data, i); i += 4;
-                float side_halved = BitConverter.ToSingle(source_data, i); i += 4;
-                UInt32 _data = BitConverter.ToUInt32(source_data, i); i += 4;
-                data.Add(new ResidencyNode() {center_x = center_x, center_y = center_y, center_z = center_z,
-                    side_halved = side_halved, data = _data});
+            for (int i = 0; i < source_data.Length;)
+            {
+                float center_x = BitConverter.ToSingle(source_data, i);
+                i += 4;
+                float center_y = BitConverter.ToSingle(source_data, i);
+                i += 4;
+                float center_z = BitConverter.ToSingle(source_data, i);
+                i += 4;
+                float side_halved = BitConverter.ToSingle(source_data, i);
+                i += 4;
+                UInt32 _data = BitConverter.ToUInt32(source_data, i);
+                i += 4;
+                data.Add(new ResidencyNode()
+                {
+                    center_x = center_x,
+                    center_y = center_y,
+                    center_z = center_z,
+                    side_halved = side_halved,
+                    data = _data
+                });
             }
             UnityEngine.Debug.Assert(data.Count == (source_data.Length / Marshal.SizeOf<ResidencyNode>()));
             return data;

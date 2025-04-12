@@ -86,7 +86,7 @@ namespace UnityCTVisualizer
         private int m_brick_requests_random_tex_size = 64;
         private byte[] m_brick_requests_random_tex_data;
         private TextureFormat m_brick_cache_format;
-        private int m_tex_plugin_format;
+        private int m_tex_plugin_format = (int)TextureSubPlugin.Format.UR8;
         private int m_brick_size;
         private int m_resolution_lvl;  // only for in-core rendering
         private float MM_TO_METERS = 0.001f;
@@ -221,7 +221,6 @@ namespace UnityCTVisualizer
             m_nbr_brick_importer_threads = max_nbr_brick_importer_threads;
 
             m_brick_cache_format = TextureFormat.R8;
-            m_tex_plugin_format = (int)TextureSubPlugin.Format.UR8;
             m_cpu_cache = new MemoryCache<byte>(cpu_memory_cache_mb, m_brick_size * m_brick_size * m_brick_size);
 
             switch (m_rendering_mode)
@@ -379,6 +378,9 @@ namespace UnityCTVisualizer
                     // initialize the brick cache usage buffer
                     InitializeBrickCacheUsage();
 
+                    // initialize brick requests random texture
+                    InitializeBrickRequestsRandomTex();
+
                     // initialize the page table(s)
                     InitializePageDirectory();
 
@@ -441,8 +443,8 @@ namespace UnityCTVisualizer
 
             }
 
-            m_brick_cache_size_mb = (m_brick_cache_size.x / 1024.0f) * (m_brick_cache_size.y / 1024.0f)
-                * m_brick_cache_size.z * sizeof(byte);
+            m_brick_cache_size_mb = m_brick_cache_size.x * m_brick_cache_size.y
+                * m_brick_cache_size.z * sizeof(byte) / (1024.0f * 1024.0f);
 
             // log useful info
             Debug.Log($"rendering mode set to: {m_rendering_mode}");
@@ -476,8 +478,6 @@ namespace UnityCTVisualizer
             m_brick_cache.wrapModeW = TextureWrapMode.Clamp;
 
             m_brick_cache.filterMode = FilterMode.Bilinear;
-
-            m_material.SetTexture(SHADER_BRICK_CACHE_TEX_ID, m_brick_cache);
 
             m_brick_cache_ptr = m_brick_cache.GetNativeTexturePtr();
 
@@ -607,7 +607,6 @@ namespace UnityCTVisualizer
 
         private void InitializeBrickRequestsRandomTex()
         {
-
             m_brick_requests_random_tex = new Texture2D(m_brick_requests_random_tex_size, m_brick_requests_random_tex_size,
                 TextureFormat.R8, mipChain: false, linear: true, createUninitialized: true);
             m_brick_requests_random_tex.wrapModeU = TextureWrapMode.Clamp;
@@ -618,7 +617,6 @@ namespace UnityCTVisualizer
             m_material.SetTexture(SHADER_BRICK_REQUESTS_RANDOM_TEX_ID, m_brick_requests_random_tex);
 
             GPUUpdateBrickRequestsRandomTex();
-
         }
 
 
@@ -723,11 +721,13 @@ namespace UnityCTVisualizer
                 if (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Vulkan &&
                     SystemInfo.graphicsDeviceType != GraphicsDeviceType.OpenGLCore &&
                     SystemInfo.graphicsDeviceType != GraphicsDeviceType.OpenGLES3)
-                    throw new NotImplementedException("multiple 3D texture brick caches are not yet implemented."
+                    throw new NotImplementedException("multiple 3D texture brick caches are not supported."
                         + " Choose a smaller than 2GB brick cache or use a different graphics API (e.g., Vulkan/OpenGLCore)");
                 yield return CreateNativeBrickCacheTexture3D();
 
             }
+
+            m_material.SetTexture(SHADER_BRICK_CACHE_TEX_ID, m_brick_cache);
 
         }
 
@@ -898,13 +898,10 @@ namespace UnityCTVisualizer
         /// <param name="brick_ids">
         ///     Collection of brick IDs to try to load into the CPU-memory cache.
         /// </param>
-        /// 
-        /// <param name="filtered_brick_ids">
-        ///     This is where filtered bricks are saved. Used to avoid array allocations.
-        /// </param>
-        private void ImportBricksIntoMemoryCache(UInt32[] brick_ids, UInt32[] filtered_brick_ids,
-             int nbr_importer_threads = -1)
+        private void ImportBricksIntoMemoryCache(UInt32[] brick_ids, int nbr_importer_threads = -1)
         {
+            UInt32[] filtered_brick_ids = new UInt32[MAX_NBR_BRICK_REQUESTS_PER_FRAME];
+
             // first cleanup the brick requests list (remove duplicates, invalid IDs,
             // bricks already in cache, and bricks that are currently being loaded)
             int count = 0;
@@ -920,6 +917,9 @@ namespace UnityCTVisualizer
                     ++count;
                 }
             }
+
+            if (count == 0)
+                return;
 
             int nbr_threads = nbr_importer_threads > 0 ? nbr_importer_threads :
                 Math.Max(Environment.ProcessorCount - 2, 1);
@@ -961,7 +961,6 @@ namespace UnityCTVisualizer
             GCHandle[] handles = new GCHandle[MAX_NBR_BRICK_UPLOADS_PER_FRAME];
 
             UInt32[] brick_requests = new UInt32[MAX_NBR_BRICK_REQUESTS_PER_FRAME];
-            UInt32[] _filtered_brick_requests = new UInt32[MAX_NBR_BRICK_REQUESTS_PER_FRAME];
 
             List<BrickCacheUsage> brick_cache_added_slots = new();
             List<BrickCacheUsage> brick_cache_evicted_slots = new();
@@ -988,7 +987,7 @@ namespace UnityCTVisualizer
                 // get bricks requested by GPU in this frame and import them into bricks memory cache
                 GPUGetBrickRequests(brick_requests);
                 GPUResetBrickRequestsBuffer();
-                ImportBricksIntoMemoryCache(brick_requests, _filtered_brick_requests, m_nbr_brick_importer_threads);
+                ImportBricksIntoMemoryCache(brick_requests, m_nbr_brick_importer_threads);
 
                 // update CPU brick cache usage and reset it on the GPU
                 CPUUpdateBrickCacheUsageBuffer();
@@ -1115,7 +1114,6 @@ namespace UnityCTVisualizer
             GCHandle[] handles = new GCHandle[MAX_NBR_BRICK_UPLOADS_PER_FRAME];
 
             UInt32[] brick_requests = new UInt32[MAX_NBR_BRICK_REQUESTS_PER_FRAME];
-            UInt32[] _filtered_brick_requests = new UInt32[MAX_NBR_BRICK_REQUESTS_PER_FRAME];
 
             List<BrickCacheUsage> brick_cache_added_slots = new();
             List<BrickCacheUsage> brick_cache_evicted_slots = new();
@@ -1138,7 +1136,7 @@ namespace UnityCTVisualizer
                 // get bricks requested by GPU in this frame and import them into bricks memory cache
                 GPUGetBrickRequests(brick_requests);
                 GPUResetBrickRequestsBuffer();
-                ImportBricksIntoMemoryCache(brick_requests, _filtered_brick_requests);
+                ImportBricksIntoMemoryCache(brick_requests);
 
                 // update CPU brick cache usage and reset it on the GPU
                 CPUUpdateBrickCacheUsageBuffer();
