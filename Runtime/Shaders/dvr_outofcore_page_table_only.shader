@@ -15,15 +15,15 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
         [HideInInspector] _PageDir("Top level multi-resolution page directory", 3D) = "" {}
         _BrickRequestsRandomTex("Brick requests random (uniform) texture", 2D) = "white" {}
 		_AlphaCutoff("Opacity Cutoff", Range(0.0, 1.0)) = 0.95
-        _SamplingQualityFactor("Sampling quality factor (multiplier) [type: float]", float) = 1.00
-        _LODQualityFactor("LOD quality factor", Range(0.1, 5)) = 0.2
+        _SamplingQualityFactor("Sampling quality factor (multiplier) [type: float]", Range(0.1, 3.0)) = 1.00
+        _LODQualityFactor("LOD quality factor", Range(0.1, 5)) = 3
+        _MaxResLvl("Max allowed resolution level (inclusive)", Integer) = 0
         _VolumeTexelSize("Size of one voxel (or texel) in the volumetric dataset", Vector) = (1, 1, 1)
         _BrickCacheDims("Brick cache dimensions [type: int]", Vector) = (1, 1, 1)
         _BrickCacheNbrBricks("Number of bricks along each dimension of the brick cache [type: int]", Vector) = (1, 1, 1)
         _BrickSize("Brick size [type: int]", Integer) = 128
         _MaxNbrBrickRequestsPerRay("Max number of brick requests per ray", Integer) = 4
         _MaxNbrBrickRequests("Max number of brick requests per frame", Integer) = 16
-
 	}
 
 	SubShader {
@@ -42,7 +42,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
             #include "UnityCG.cginc"
             #include "Include/common.cginc"
 
-            #define VISUALIZE_RANDOM_BRICK_REQUESTS_TEX 1
+            #define VISUALIZE_RANDOM_BRICK_REQUESTS_TEX 0
             #define VISUALIZE_PAGE_TABLE_ENTRY_SPACE_SKIPPING 0
 
             #define INVALID_BRICK_ID 0x80000000
@@ -57,7 +57,6 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
 
             // Visualization Parameters
             sampler3D _BrickCache;
-            // TODO: use one sampler for these 2D textures
             sampler2D _TFColors;
 
             sampler2D _BrickRequestsRandomTex;
@@ -66,7 +65,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
 
             float _AlphaCutoff = 254.0f / 255.0f;
             float _SamplingQualityFactor = 1.0f;
-            float _LODQualityFactor = 1.0f;
+            float _LODQualityFactor = 3.0f;
             int _MaxResLvl = 0;
 
 
@@ -111,15 +110,15 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
             /// </summary>
             uniform RWStructuredBuffer<float> brick_cache_usage : register(u2);
 
+
             /// <summary>
             ///     Uses viewing parameters to determine the desired resolution level for the provided sample point.
             /// </summary>
             int chooseDesiredResolutionLevel(float3 p)
             {
                 // distance-based approach - convert back to model space then view space
-                float d = length(UnityObjectToViewPos(p + float3(-0.5f, -0.5f, -0.5f)));
-                return 0;
-                // return min(floor(d / _LODQualityFactor), _MaxResLvl);
+                float d = length(UnityObjectToViewPos(p - float3(0.5f, 0.5f, 0.5f)));
+                return min(floor(d / _LODQualityFactor), _MaxResLvl);
             }
 
             float adpatSamplingDistance(float step_size, int res_lvl)
@@ -215,7 +214,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
                     int res_lvl = chooseDesiredResolutionLevel(accm_ray);
 
                     // adaptive ray sampling technique
-                    step_size = adpatSamplingDistance(step_size, res_lvl);
+                    // step_size = adpatSamplingDistance(step_size, res_lvl);
 
                     // sample current position
                     float sampled_density = 0.0f;
@@ -224,7 +223,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
                     // exploit spatial coherency to avoid expensive texture lookups
                     if ((res_lvl != prev_res_lvl) || any(page_dir_offset != prev_page_dir_offset))
                     {
-                        int4 page_dir_addrs = int4(_PageDirBase[res_lvl].xyz + page_dir_offset, 0);
+                        int4 page_dir_addrs = int4(_PageDirBase[res_lvl].xyz  + page_dir_offset, 0);
                         page_dir_entry = _PageDir.Load(page_dir_addrs);
                         prev_page_dir_offset = page_dir_offset;
                         prev_res_lvl = res_lvl;
@@ -262,19 +261,23 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
                         }
 #endif
 
-                        t += skip_page_directory_entry(accm_ray, ray.dir, res_lvl) + epsilon;
+                        t += a + epsilon;
                         sampled_density = page_dir_entry.x / 255.0f;
                     }
 
                     else
                     {
+                        // skip the empty page directory entry
+                        float a = skip_page_directory_entry(accm_ray, ray.dir, res_lvl);
+                        t += a + epsilon;
+
                         if (nbr_requested_bricks < _MaxNbrBrickRequestsPerRay) {
                            requests[nbr_requested_bricks] = getBrickID(accm_ray, res_lvl);
                            ++nbr_requested_bricks;
                         }
-                        
-                        // continue because there is nothing to be sampled
-                        break;
+
+                        // break because there is nothing to be sampled
+                        continue;
                     }
 
                     // apply transfer function and composition

@@ -8,18 +8,15 @@ using TextureSubPlugin;
 using UnityEngine;
 using UnityEngine.Assertions;
 using UnityEngine.Rendering;
-using static UnityEngine.UIElements.UxmlAttributeDescription;
 
 namespace UnityCTVisualizer
 {
 
     public enum RenderingMode
     {
-        IN_CORE,
-        IN_CORE_OCTREE,
-        OUT_OF_CORE_HYBRID,
-        OUT_OF_CORE_PAGE_TABLE_ONLY,
-        OUT_OF_CORE_OCTREE_ONLY,
+        IC,
+        OOC_PT,
+        OOC_HYBRID
     }
 
     [RequireComponent(typeof(MeshRenderer)), RequireComponent(typeof(MeshFilter))]
@@ -60,7 +57,7 @@ namespace UnityCTVisualizer
         private readonly int SHADER_BRICK_CACHE_NBR_BRICKS = Shader.PropertyToID("_BrickCacheNbrBricks");
         private readonly int SHADER_BRICK_CACHE_VOXEL_SIZE = Shader.PropertyToID("_BrickCacheVoxelSize");
         private readonly int SHADER_LOD_QUALITY_FACTOR_ID = Shader.PropertyToID("_LODQualityFactor");
-        private readonly int SHADER_MAX_RES_LVL_ID = Shader.PropertyToID("_MaxResLvl");
+        private readonly int SHADER_MAX_RES_LVL_ID = Shader.PropertyToID("_MaxResLvl"); // _MaxResLvl
 
         private int m_max_octree_depth;
         private int m_octree_start_depth = 0;
@@ -172,6 +169,8 @@ namespace UnityCTVisualizer
         /////////////////////////////////
         private Texture3D m_page_dir = null;
         private float[] m_page_dir_data;
+        private Vector4[] m_page_dir_base;
+        private Vector4[] m_page_dir_dims;
 
         /////////////////////////////////
         // OPTIMIZATION STRUCTURES
@@ -193,6 +192,7 @@ namespace UnityCTVisualizer
         private CVDSMetadata m_metadata;
         private Vector4[] m_nbr_bricks_per_res_lvl;
         private int m_nbr_brick_importer_threads = -1;
+        private bool m_vis_params_dirty = false;
 
 
         /////////////////////////////////
@@ -237,7 +237,7 @@ namespace UnityCTVisualizer
             switch (m_rendering_mode)
             {
 
-                case RenderingMode.IN_CORE:
+                case RenderingMode.IC:
                 {
                     // check parameter constraints
                     if (m_resolution_lvl < 0 || m_resolution_lvl >= m_metadata.NbrResolutionLvls)
@@ -273,7 +273,7 @@ namespace UnityCTVisualizer
                     break;
                 }
 
-                case RenderingMode.OUT_OF_CORE_HYBRID:
+                case RenderingMode.OOC_HYBRID:
                 {
 
                     // check parameter constraints
@@ -352,7 +352,7 @@ namespace UnityCTVisualizer
 
                 }  // END of switch case RenderingMode.OUT_OF_CORE
 
-                case RenderingMode.OUT_OF_CORE_PAGE_TABLE_ONLY:
+                case RenderingMode.OOC_PT:
                 {
                     // check parameter constraints
                     if ((brick_cache_size.x <= 0) || (brick_cache_size.y <= 0) || (brick_cache_size.z <= 0)
@@ -420,6 +420,7 @@ namespace UnityCTVisualizer
                     m_material.SetInteger(SHADER_MAX_NBR_BRICK_REQUESTS_PER_RAY_ID, MAX_NBR_BRICK_REQUESTS_PER_RAY);
                     m_material.SetInteger(SHADER_MAX_NBR_BRICK_REQUESTS_ID, MAX_NBR_BRICK_REQUESTS_PER_FRAME);
                     m_material.SetInteger(SHADER_BRICK_SIZE_ID, m_brick_size);
+                    m_material.SetInteger(SHADER_MAX_RES_LVL_ID, m_metadata.NbrResolutionLvls - 1);
 
                     Vector4 brick_cache_voxel_size = new(1.0f / m_brick_cache_size.x,
                         1.0f / m_brick_cache_size.y, 1.0f / m_brick_cache_size.z);
@@ -636,12 +637,28 @@ namespace UnityCTVisualizer
         /// </exception>
         private void InitializePageDirectory()
         {
+            m_page_dir_base = new Vector4[m_metadata.NbrResolutionLvls];
+            m_page_dir_dims = new Vector4[m_metadata.NbrResolutionLvls];
 
-            Vector3Int page_dir_dims = new(
-               Mathf.CeilToInt(m_metadata.Dims.x / (float)m_brick_size),
-               Mathf.CeilToInt(m_metadata.Dims.y / (float)m_brick_size),
-               Mathf.CeilToInt(m_metadata.Dims.z / (float)m_brick_size)
-            );
+            int accm_x = 0;
+            for (int i = 0; i < m_metadata.NbrResolutionLvls; ++i)
+            {
+                m_page_dir_dims[i] = new Vector4(
+                    Mathf.Ceil(m_metadata.Dims.x / (float)(m_brick_size << i)),
+                    Mathf.Ceil(m_metadata.Dims.y / (float)(m_brick_size << i)),
+                    Mathf.Ceil(m_metadata.Dims.z / (float)(m_brick_size << i))
+                );
+
+                m_page_dir_base[i] = new Vector4(
+                    accm_x,
+                    (int)m_page_dir_dims[0].y - (int)m_page_dir_dims[i].y,
+                    0
+                );
+
+                accm_x += (int)m_page_dir_dims[i].x;
+            }
+
+            Vector3Int page_dir_dims = new(accm_x, (int)m_page_dir_dims[0].y, (int)m_page_dir_dims[0].z);
 
             // initialize CPU-side page table(s) data
             int page_dir_data_size = page_dir_dims.x * page_dir_dims.y * page_dir_dims.z * 4;
@@ -669,20 +686,8 @@ namespace UnityCTVisualizer
             m_page_dir.wrapModeW = TextureWrapMode.Clamp;
 
             // set shader properties
-            Vector4[] page_dir_base = new Vector4[m_metadata.NbrResolutionLvls];
-            Vector4[] page_dir_dims_array = new Vector4[m_metadata.NbrResolutionLvls];
-
-            for (int i = 0; i < m_metadata.NbrResolutionLvls; ++i)
-            {
-                page_dir_base[i] = new Vector4(0, 0, 0, 0);  // TODO
-                page_dir_dims_array[i] = new Vector4(
-                    Mathf.Ceil(m_metadata.Dims.x / (float)(m_brick_size << i)),
-                    Mathf.Ceil(m_metadata.Dims.y / (float)(m_brick_size << i)),
-                    Mathf.Ceil(m_metadata.Dims.z / (float)(m_brick_size << i))
-                );
-            }
-            m_material.SetVectorArray(SHADER_PAGE_DIR_BASE_ID, page_dir_base);
-            m_material.SetVectorArray(SHADER_PAGE_DIR_DIMS_ID, page_dir_dims_array);
+            m_material.SetVectorArray(SHADER_PAGE_DIR_BASE_ID, m_page_dir_base);
+            m_material.SetVectorArray(SHADER_PAGE_DIR_DIMS_ID, m_page_dir_dims);
 
             m_material.SetTexture(SHADER_PAGE_DIR_TEX_ID, m_page_dir);
 
@@ -709,33 +714,28 @@ namespace UnityCTVisualizer
             // and you try to visualize some uninitailized blocks you might observe some artifacts (duh?!)
             if (ForceNativeTextureCreation)
             {
-
                 Debug.Log("forcing native 3D texture creation");
                 yield return CreateNativeBrickCacheTexture3D();
-
             }
-            else if (m_brick_cache_size_mb <= 2048)
+            else if (m_brick_cache_size_mb < 2048)
             {
-
                 Debug.Log($"requested brick cache size{m_brick_cache_size_mb}MB is less than 2GB."
                     + " Using Unity's API to create the 3D texture");
                 CreateBrickCacheTexture3D();
-
             }
             else
             {
-
                 if (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Vulkan &&
                     SystemInfo.graphicsDeviceType != GraphicsDeviceType.OpenGLCore &&
                     SystemInfo.graphicsDeviceType != GraphicsDeviceType.OpenGLES3)
                     throw new NotImplementedException("multiple 3D texture brick caches are not supported."
                         + " Choose a smaller than 2GB brick cache or use a different graphics API (e.g., Vulkan/OpenGLCore)");
                 yield return CreateNativeBrickCacheTexture3D();
-
             }
 
             m_material.SetTexture(SHADER_BRICK_CACHE_TEX_ID, m_brick_cache);
             m_material.SetFloat(SHADER_SAMPLING_QUALITY_FACTOR_ID, 1.0f);
+            // m_material.SetFloat(SHADER_LOD_QUALITY_FACTOR_ID, 2.0f);
 
         }
 
@@ -913,6 +913,12 @@ namespace UnityCTVisualizer
             }  // END WHILE
 
             Debug.Log($"uploading all {total_nbr_bricks} bricks to GPU took: {stopwatch.Elapsed}s");
+
+            while (true)
+            {
+                yield return new WaitForEndOfFrame();
+                GPUUpdateVisualizationParams();
+            }
         }
 
         private void GPUGetBrickRequests(UInt32[] brick_requests)
@@ -1051,6 +1057,7 @@ namespace UnityCTVisualizer
                 GPUResetBrickCacheUsageBuffer();
 
                 GPURandomizeBrickRequestsTexOffset();
+                GPUUpdateVisualizationParams();
 
                 // upload requested bricks to the GPU from the bricks reply queue
                 while (
@@ -1575,7 +1582,6 @@ namespace UnityCTVisualizer
 
         private int GetPageTableIndex(UInt32 brick_id)
         {
-
             int id = (int)(brick_id & 0x03FFFFFF);
             int res_lvl = (int)(brick_id >> 26);
 
@@ -1583,17 +1589,20 @@ namespace UnityCTVisualizer
                 (int)m_nbr_bricks_per_res_lvl[res_lvl].y, (int)m_nbr_bricks_per_res_lvl[res_lvl].z);
 
             int x = id % nbr_bricks.x;
-            int y = /* m_page_dir.height - 1 - */ ((id / nbr_bricks.x) % nbr_bricks.y);
-            int z = /* m_page_dir.depth - 1 - */ (id / (nbr_bricks.x * nbr_bricks.y));
+            int y = (id / nbr_bricks.x) % nbr_bricks.y;
+            int z = id / (nbr_bricks.x * nbr_bricks.y);
 
-            if ((x >= m_page_dir.width) || (y >= m_page_dir.height) || (z >= m_page_dir.depth))
+            if ((x >= m_page_dir_dims[res_lvl].x) || (y >= m_page_dir_dims[res_lvl].y)
+                || (z >= m_page_dir_dims[res_lvl].z))
             {
                 throw new Exception("provided brick is outside the range of bricks covered by the page table(s)");
             }
 
-            int idx = z * m_page_dir.width * m_page_dir.height + y * m_page_dir.width + x;
-            return idx;
+            int idx = (m_page_dir.width * m_page_dir.height) * ((int)m_page_dir_base[res_lvl].z + z)
+                + m_page_dir.width * ((int)m_page_dir_base[res_lvl].y + y)
+                + (int)m_page_dir_base[res_lvl].x + x;
 
+            return idx;
         }
 
         // TODO: adjust this so that it handles all allowed resolution levels not just res lvl 0
@@ -1659,17 +1668,35 @@ namespace UnityCTVisualizer
 
         private void OnModelAlphaCutoffChange(float value)
         {
-            m_material.SetFloat(SHADER_ALPHA_CUTOFF_ID, value);
+            m_vis_params_dirty = true;
+            m_alpha_cutoff = value;
         }
 
         private void OnModelSamplingQualityFactorChange(float value)
         {
-            m_material.SetFloat(SHADER_SAMPLING_QUALITY_FACTOR_ID, value);
+            m_vis_params_dirty = true;
+            m_sampling_quality_factor = value;
         }
 
         private void OnModelLODQualityFactorChange(float value)
         {
-            m_material.SetFloat(SHADER_LOD_QUALITY_FACTOR_ID, value);
+            m_vis_params_dirty = true;
+            m_lod_quality_factor = value;
+            m_lod_quality_factor = value;
+        }
+
+        private float m_alpha_cutoff;
+        private float m_sampling_quality_factor;
+        private float m_lod_quality_factor;
+        private void GPUUpdateVisualizationParams()
+        {
+            if (!m_vis_params_dirty)
+                return;
+
+            m_material.SetFloat(SHADER_ALPHA_CUTOFF_ID, m_alpha_cutoff);
+            m_material.SetFloat(SHADER_SAMPLING_QUALITY_FACTOR_ID, m_sampling_quality_factor);
+            m_material.SetFloat(SHADER_LOD_QUALITY_FACTOR_ID, m_lod_quality_factor);
+            m_vis_params_dirty = false;
         }
 
         private void OnModelTFChange(TF tf, ITransferFunction tf_so)
