@@ -4,7 +4,8 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace UnityCTVisualizer {
+namespace UnityCTVisualizer
+{
 
     /// <summary>
     ///     Serializable wrapper around a volumetric dataset and its visualization parameters.
@@ -20,7 +21,8 @@ namespace UnityCTVisualizer {
         fileName = "volumetric_dataset",
         menuName = "UnityCTVisualizer/VolumetricDataset"
     )]
-    public class VolumetricDataset : ScriptableObject {
+    public class VolumetricDataset : ScriptableObject
+    {
 
         /////////////////////////////////
         // CONSTANTS
@@ -33,22 +35,28 @@ namespace UnityCTVisualizer {
         // VISUALIZATION PARAMETERS
         /////////////////////////////////
         private float m_AlphaCutoff = 254.0f / 255.0f;
-        public float AlphaCutoff {
-            get => m_AlphaCutoff; set {
+        public float AlphaCutoff
+        {
+            get => m_AlphaCutoff; set
+            {
                 m_AlphaCutoff = value;
                 VisualizationParametersEvents.ModelAlphaCutoffChange?.Invoke(value);
             }
         }
-        private MaxIterations m_MaxIterations = MaxIterations._1024;
-        public MaxIterations MaxIterations {
-            get => m_MaxIterations; set {
-                m_MaxIterations = value;
-                VisualizationParametersEvents.ModelMaxIterationsChange?.Invoke(value);
+        private float m_SamplingQualityFactor = 1.0f;
+        public float SamplingQualityFactor
+        {
+            get => m_SamplingQualityFactor; set
+            {
+                m_SamplingQualityFactor = value;
+                VisualizationParametersEvents.ModelSamplingQualityFactorChange?.Invoke(value);
             }
         }
         private INTERPOLATION m_Interpolation = INTERPOLATION.TRILLINEAR;
-        public INTERPOLATION InterpolationMethode {
-            get => m_Interpolation; set {
+        public INTERPOLATION InterpolationMethode
+        {
+            get => m_Interpolation; set
+            {
                 m_Interpolation = value;
                 VisualizationParametersEvents.ModelInterpolationChange?.Invoke(value);
             }
@@ -56,11 +64,14 @@ namespace UnityCTVisualizer {
 
         private TF m_CurrentTF = TF.TF1D;
         private Dictionary<TF, ITransferFunction> m_TransferFunctions;
-        public TF TransferFunction {
-            set {
+        public TF TransferFunction
+        {
+            set
+            {
                 m_CurrentTF = value;
                 ITransferFunction tf_so;
-                if (!m_TransferFunctions.TryGetValue(value, out tf_so)) {
+                if (!m_TransferFunctions.TryGetValue(value, out tf_so))
+                {
                     tf_so = TransferFunctionFactory.Create(value);
                     m_TransferFunctions.Add(m_CurrentTF, tf_so);
                 }
@@ -68,11 +79,12 @@ namespace UnityCTVisualizer {
             }
         }
 
-        public void DispatchVisualizationParamsChangeEvents() {
+        public void DispatchVisualizationParamsChangeEvents()
+        {
             VisualizationParametersEvents.ModelTFChange?.Invoke(m_CurrentTF, m_TransferFunctions[m_CurrentTF]);
             VisualizationParametersEvents.ModelAlphaCutoffChange?.Invoke(m_AlphaCutoff);
             VisualizationParametersEvents.ModelInterpolationChange?.Invoke(m_Interpolation);
-            VisualizationParametersEvents.ModelMaxIterationsChange?.Invoke(m_MaxIterations);
+            VisualizationParametersEvents.ModelSamplingQualityFactorChange?.Invoke(m_SamplingQualityFactor);
         }
 
         /////////////////////////////////
@@ -81,7 +93,8 @@ namespace UnityCTVisualizer {
         private CVDSMetadata m_metadata;
         public CVDSMetadata Metadata { get => m_metadata; }
 
-        public void Init(CVDSMetadata metadata) {
+        public void Init(CVDSMetadata metadata)
+        {
             m_metadata = metadata;
         }
 
@@ -119,7 +132,8 @@ namespace UnityCTVisualizer {
         *   next brick slice along the Z axis direction.
         *
         */
-        public void ComputeVolumeOffset(UInt32 brick_id, int brick_size, out Int32 x, out Int32 y, out Int32 z) {
+        public void ComputeVolumeOffset(UInt32 brick_id, int brick_size, out Int32 x, out Int32 y, out Int32 z)
+        {
             int id = (int)(brick_id & 0x03FFFFFF);
             int res_lvl = (int)(brick_id >> 26);
             // transition to Unity's Texture3D coordinate system
@@ -130,37 +144,44 @@ namespace UnityCTVisualizer {
             z = brick_size * (id / (nbr_bricks_x * nbr_bricks_y));
         }
 
-        private void OnEnable() {
-            if (m_TransferFunctions == null) {
+        private void OnEnable()
+        {
+            if (m_TransferFunctions == null)
+            {
                 m_TransferFunctions = new Dictionary<TF, ITransferFunction> { { TF.TF1D, TransferFunctionFactory.Create(TF.TF1D) } };
             }
 
             VisualizationParametersEvents.ViewTFChange += OnViewTFChange;
             VisualizationParametersEvents.ViewAlphaCutoffChange += OnViewAlphaCutoffChange;
-            VisualizationParametersEvents.ViewMaxIterationsChange += OnViewMaxIterationsChange;
+            VisualizationParametersEvents.ViewSamplingQualityFactorChange += OnViewSamplingQualityFactorChange;
             VisualizationParametersEvents.ViewInterpolationChange += OnViewInterpolationChange;
         }
 
-        private void OnDisable() {
+        private void OnDisable()
+        {
             VisualizationParametersEvents.ViewTFChange -= OnViewTFChange;
             VisualizationParametersEvents.ViewAlphaCutoffChange -= OnViewAlphaCutoffChange;
-            VisualizationParametersEvents.ViewMaxIterationsChange -= OnViewMaxIterationsChange;
+            VisualizationParametersEvents.ViewSamplingQualityFactorChange -= OnViewSamplingQualityFactorChange;
             VisualizationParametersEvents.ViewInterpolationChange -= OnViewInterpolationChange;
         }
 
-        private void OnViewAlphaCutoffChange(float alphaCutoff) {
+        private void OnViewAlphaCutoffChange(float alphaCutoff)
+        {
             AlphaCutoff = Mathf.Clamp01(alphaCutoff);
         }
 
-        private void OnViewMaxIterationsChange(MaxIterations maxIterations) {
-            MaxIterations = maxIterations;
+        private void OnViewSamplingQualityFactorChange(float val)
+        {
+            SamplingQualityFactor = val;
         }
 
-        private void OnViewInterpolationChange(INTERPOLATION interpolation) {
+        private void OnViewInterpolationChange(INTERPOLATION interpolation)
+        {
             InterpolationMethode = interpolation;
         }
 
-        private void OnViewTFChange(TF new_tf) {
+        private void OnViewTFChange(TF new_tf)
+        {
             TransferFunction = new_tf;
         }
     }

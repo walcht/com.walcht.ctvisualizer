@@ -15,9 +15,8 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
         [HideInInspector] _PageDir("Top level multi-resolution page directory", 3D) = "" {}
         _BrickRequestsRandomTex("Brick requests random (uniform) texture", 2D) = "white" {}
 		_AlphaCutoff("Opacity Cutoff", Range(0.0, 1.0)) = 0.95
-        _MaxIterations("Maximum number of samples to take along longest path (cube diagonal) [type: int]", float) = 512
+        _SamplingQualityFactor("Sampling quality factor (multiplier) [type: float]", float) = 1.00
         _VolumeTexelSize("Size of one voxel (or texel) in the volumetric dataset", Vector) = (1, 1, 1)
-
         _BrickCacheDims("Brick cache dimensions [type: int]", Vector) = (1, 1, 1)
         _BrickCacheNbrBricks("Number of bricks along each dimension of the brick cache [type: int]", Vector) = (1, 1, 1)
         _BrickSize("Brick size [type: int]", Integer) = 128
@@ -42,6 +41,8 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
             #include "UnityCG.cginc"
             #include "Include/common.cginc"
 
+            // #define VISUALIZE_RANDOM_BRICK_REQUESTS_TEX 1
+
             #define INVALID_BRICK_ID 0x80000000
             #define BRICK_CACHE_SLOT_USED 1
 
@@ -61,8 +62,8 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
             float4 _BrickRequestsRandomTex_ST;
 
 
-            float _AlphaCutoff;
-            float _MaxIterations;
+            float _AlphaCutoff = 254.0f / 255.0f;
+            float _SamplingQualityFactor = 1.0f;
 
             // this should have been an uint4 but Unity ... Just use a float4, you
             // don't want to deal with the crap that will happen if you use any other type ...
@@ -176,7 +177,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
                 // initialize a ray in model space
                 Ray ray = flipRay(getRayFromBackface(interpolated.modelVertex));
 
-                float step_size = BOUNDING_BOX_LONGEST_SEGMENT / _MaxIterations;
+                float step_size =  1.0f / (max(_VolumeDims[0].x, max(_VolumeDims[0].y, _VolumeDims[0].z)) * _SamplingQualityFactor);
                 float epsilon = step_size / 100.0f;
                 float4 accm_color = float4(0.0f, 0.0f, 0.0f, 0.0f);
 
@@ -184,10 +185,14 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
                 int3 prev_page_dir_offset = int3(-1, -1, -1);
                 float4 page_dir_entry;
 
+#ifdef VISUALIZE_RANDOM_BRICK_REQUESTS_TEX
+                return fixed4(tex2Dlod(_BrickRequestsRandomTex, float4(interpolated.uv, 0, 0)).r, 0.0f, 0.0f, 1.0f);
+#endif
+
                 // start from epsilon to avoid out-of-volume rendering artifacts due to
                 // floating point precision
-                for (float t = epsilon; t < ray.t_out; ) {
-
+                for (float t = epsilon; t < ray.t_out; )
+                {
                     float3 accm_ray = ray.origin + ray.dir * t;
                     int res_lvl = chooseDesiredResolutionLevel(accm_ray);
 
@@ -196,13 +201,12 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
                     int3 page_dir_offset = get_page_dir_offset(accm_ray, res_lvl);
 
                     // exploit spatial coherency to avoid expensive texture lookups
-                    if ((res_lvl != prev_res_lvl) || any(page_dir_offset != prev_page_dir_offset)) {
-
+                    if ((res_lvl != prev_res_lvl) || any(page_dir_offset != prev_page_dir_offset))
+                    {
                         int4 page_dir_addrs = int4(_PageDirBase[res_lvl].xyz + page_dir_offset, 0);
                         page_dir_entry = _PageDir.Load(page_dir_addrs);
                         prev_page_dir_offset = page_dir_offset;
                         prev_res_lvl = res_lvl;
-
                     }
 
                     uint paging_flag = page_dir_entry.w;

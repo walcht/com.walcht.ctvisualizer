@@ -8,6 +8,7 @@ using TextureSubPlugin;
 using UnityEngine;
 using UnityEngine.Assertions;
 using UnityEngine.Rendering;
+using static UnityEngine.UIElements.UxmlAttributeDescription;
 
 namespace UnityCTVisualizer
 {
@@ -31,7 +32,7 @@ namespace UnityCTVisualizer
         private readonly int SHADER_BRICK_CACHE_TEX_ID = Shader.PropertyToID("_BrickCache");
         private readonly int SHADER_TFTEX_ID = Shader.PropertyToID("_TFColors");
         private readonly int SHADER_ALPHA_CUTOFF_ID = Shader.PropertyToID("_AlphaCutoff");
-        private readonly int SHADER_MAX_ITERATIONS_ID = Shader.PropertyToID("_MaxIterations");
+        private readonly int SHADER_SAMPLING_QUALITY_FACTOR_ID = Shader.PropertyToID("_SamplingQualityFactor");
 
 
         /////////////////////////////////
@@ -63,7 +64,7 @@ namespace UnityCTVisualizer
         private readonly int MAX_NBR_BRICK_REQUESTS_PER_RAY = 4;
         private readonly int MAX_NBR_BRICK_REQUESTS_PER_FRAME = 16;
         private readonly int MAX_NBR_BRICK_UPLOADS_PER_FRAME = 4;
-        private readonly UInt32 INVALID_BRICK_ID = 0x80000000;
+        public static readonly UInt32 INVALID_BRICK_ID = 0x80000000;
         private readonly UInt16 MAPPED_PAGE_TABLE_ENTRY = 2;
         private readonly UInt16 UNMAPPED_PAGE_TABLE_ENTRY = 1;
         private readonly UInt16 HOMOGENEOUS_PAGE_TABLE_ENTRY = 0;
@@ -76,7 +77,6 @@ namespace UnityCTVisualizer
         // COROUTINES
         /////////////////////////////////
         private Coroutine m_interpolation_method_update;
-        private Coroutine m_max_iterations_update;
 
         /////////////////////////////////
         // PARAMETERS
@@ -199,6 +199,12 @@ namespace UnityCTVisualizer
         public bool ForceNativeTextureCreation = true;
 
 
+        /////////////////////////////////
+        // EVENTS
+        /////////////////////////////////
+        public static event Action OnNoMoreBrickRequests;
+
+
         private void Awake()
         {
             m_transform = GetComponent<Transform>();
@@ -228,7 +234,6 @@ namespace UnityCTVisualizer
 
                 case RenderingMode.IN_CORE:
                 {
-
                     // check parameter constraints
                     if (m_resolution_lvl < 0 || m_resolution_lvl >= m_metadata.NbrResolutionLvls)
                     {
@@ -261,7 +266,6 @@ namespace UnityCTVisualizer
                     StartCoroutine(InCoreLoop());
 
                     break;
-
                 }
 
                 case RenderingMode.OUT_OF_CORE_HYBRID:
@@ -344,12 +348,10 @@ namespace UnityCTVisualizer
 
                 case RenderingMode.OUT_OF_CORE_PAGE_TABLE_ONLY:
                 {
-
                     // check parameter constraints
                     if ((brick_cache_size.x <= 0) || (brick_cache_size.y <= 0) || (brick_cache_size.z <= 0)
-                        || !Mathf.IsPowerOfTwo(brick_cache_size.x) || !Mathf.IsPowerOfTwo(brick_cache_size.y)
-                        || !Mathf.IsPowerOfTwo(brick_cache_size.z) || ((brick_cache_size.x % m_brick_size) != 0)
-                        || ((brick_cache_size.y % m_brick_size) != 0) || ((brick_cache_size.z % m_brick_size) != 0))
+                        || ((brick_cache_size.x % m_brick_size) != 0) || ((brick_cache_size.y % m_brick_size) != 0)
+                        || ((brick_cache_size.z % m_brick_size) != 0))
                     {
                         throw new Exception($"invalid provided brick cache dimension size for out-of-core rendering: {brick_cache_size}");
                     }
@@ -435,16 +437,14 @@ namespace UnityCTVisualizer
                     StartCoroutine(OOCPageTableOnlyLoop());
 
                     break;
-
                 }
-
                 default:
                 break;
-
             }
 
-            m_brick_cache_size_mb = m_brick_cache_size.x * m_brick_cache_size.y
-                * m_brick_cache_size.z * sizeof(byte) / (1024.0f * 1024.0f);
+            // avoid overflow errors
+            m_brick_cache_size_mb = (m_brick_cache_size.x / 1024.0f) * (m_brick_cache_size.y / 1024.0f)
+                * m_brick_cache_size.z;
 
             // log useful info
             Debug.Log($"rendering mode set to: {m_rendering_mode}");
@@ -462,13 +462,11 @@ namespace UnityCTVisualizer
             m_wireframe_cube_mesh = WireframeCubeMesh.GenerateMesh();
 
             StartCoroutine(InternalInit());
-
         }
 
 
         private void CreateBrickCacheTexture3D()
         {
-
             m_brick_cache = new Texture3D(m_brick_cache_size.x, m_brick_cache_size.y, m_brick_cache_size.z,
                 m_brick_cache_format, mipChain: false, createUninitialized: false);  // TODO: set back to true
 
@@ -482,7 +480,6 @@ namespace UnityCTVisualizer
             m_brick_cache_ptr = m_brick_cache.GetNativeTexturePtr();
 
             Assert.AreNotEqual(m_brick_cache_ptr, IntPtr.Zero);
-
         }
 
         private IEnumerator CreateNativeBrickCacheTexture3D()
@@ -609,10 +606,12 @@ namespace UnityCTVisualizer
         {
             m_brick_requests_random_tex = new Texture2D(m_brick_requests_random_tex_size, m_brick_requests_random_tex_size,
                 TextureFormat.R8, mipChain: false, linear: true, createUninitialized: true);
-            m_brick_requests_random_tex.wrapModeU = TextureWrapMode.Clamp;
-            m_brick_requests_random_tex.wrapModeV = TextureWrapMode.Clamp;
-            m_brick_requests_random_tex.wrapModeW = TextureWrapMode.Clamp;
+
+            m_brick_requests_random_tex.wrapModeU = TextureWrapMode.Repeat;
+            m_brick_requests_random_tex.wrapModeV = TextureWrapMode.Repeat;
+
             m_brick_requests_random_tex.filterMode = FilterMode.Point;
+
             m_brick_requests_random_tex_data = new byte[m_brick_requests_random_tex_size * m_brick_requests_random_tex_size];
             m_material.SetTexture(SHADER_BRICK_REQUESTS_RANDOM_TEX_ID, m_brick_requests_random_tex);
 
@@ -728,6 +727,7 @@ namespace UnityCTVisualizer
             }
 
             m_material.SetTexture(SHADER_BRICK_CACHE_TEX_ID, m_brick_cache);
+            m_material.SetFloat(SHADER_SAMPLING_QUALITY_FACTOR_ID, 1.0f);
 
         }
 
@@ -736,7 +736,7 @@ namespace UnityCTVisualizer
         {
             VisualizationParametersEvents.ModelTFChange += OnModelTFChange;
             VisualizationParametersEvents.ModelAlphaCutoffChange += OnModelAlphaCutoffChange;
-            VisualizationParametersEvents.ModelMaxIterationsChange += OnModelMaxIterationsChange;
+            VisualizationParametersEvents.ModelSamplingQualityFactorChange += OnModelSamplingQualityFactorChange;
             VisualizationParametersEvents.ModelInterpolationChange += OnModelInterpolationChange;
         }
 
@@ -744,7 +744,7 @@ namespace UnityCTVisualizer
         {
             VisualizationParametersEvents.ModelTFChange -= OnModelTFChange;
             VisualizationParametersEvents.ModelAlphaCutoffChange -= OnModelAlphaCutoffChange;
-            VisualizationParametersEvents.ModelMaxIterationsChange -= OnModelMaxIterationsChange;
+            VisualizationParametersEvents.ModelSamplingQualityFactorChange -= OnModelSamplingQualityFactorChange;
             VisualizationParametersEvents.ModelInterpolationChange -= OnModelInterpolationChange;
 
             if (m_transfer_function != null)
@@ -910,6 +910,13 @@ namespace UnityCTVisualizer
                 if ((brick_ids[i] != INVALID_BRICK_ID) && !m_cpu_cache.Contains(brick_ids[i])
                     && !m_in_flight_brick_imports.ContainsKey(brick_ids[i]))
                 {
+                    /*
+                    if (m_cpu_cache.Contains(brick_ids[i]))
+                    {
+                        m_brick_reply_queue.Enqueue(brick_ids[i]);
+                        continue;
+                    }
+                    */
                     // save this brick IDs so that future imports know it is being imported
                     // this is semantically a HashSet, the value 0 is fully arbitrary
                     m_in_flight_brick_imports[brick_ids[i]] = 0;
@@ -919,7 +926,12 @@ namespace UnityCTVisualizer
             }
 
             if (count == 0)
+            {
+                // finally, no more brick requests - the GPU must be so happy
+                if (m_in_flight_brick_imports.Count == 0)
+                    OnNoMoreBrickRequests?.Invoke();
                 return;
+            }
 
             int nbr_threads = nbr_importer_threads > 0 ? nbr_importer_threads :
                 Math.Max(Environment.ProcessorCount - 2, 1);
@@ -1615,30 +1627,9 @@ namespace UnityCTVisualizer
             m_material.SetFloat(SHADER_ALPHA_CUTOFF_ID, value);
         }
 
-        private void OnModelMaxIterationsChange(MaxIterations value)
+        private void OnModelSamplingQualityFactorChange(float value)
         {
-            if (m_max_iterations_update != null)
-            {
-                StopCoroutine(m_max_iterations_update);
-                m_max_iterations_update = null;
-            }
-
-            var maxIters = value switch
-            {
-                MaxIterations._128 => 128,
-                MaxIterations._256 => 256,
-                MaxIterations._512 => 512,
-                MaxIterations._1024 => 1024,
-                MaxIterations._2048 => 2048,
-                _ => throw new Exception(value.ToString()),
-            };
-            // do NOT update immediately as the brick cache texture could not be available
-            m_max_iterations_update = StartCoroutine(UpdateWhenBrickCacheReady(() =>
-            {
-                // Material.SetInteger() is busted ... do NOT use it
-                m_material.SetFloat(SHADER_MAX_ITERATIONS_ID, maxIters);
-                m_max_iterations_update = null;
-            }));
+            m_material.SetFloat(SHADER_SAMPLING_QUALITY_FACTOR_ID, value);
         }
 
         private void OnModelTFChange(TF tf, ITransferFunction tf_so)

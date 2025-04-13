@@ -150,4 +150,5 @@ public class MemoryCache<T> where T : unmanaged
 
     public bool Contains(UInt32 id) => m_cache.ContainsKey(id);
 
+    public int GetMaxNumberHomogeneuousEntries() => m_max_nbr_homogeneous_entries;
 }
