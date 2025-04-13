@@ -39,6 +39,7 @@ namespace UnityCTVisualizer
         // OUT-OF-CORE DVR SHADER IDs
         /////////////////////////////////
         private readonly int SHADER_BRICK_REQUESTS_RANDOM_TEX_ID = Shader.PropertyToID("_BrickRequestsRandomTex");
+        private readonly int SHADER_BRICK_REQUESTS_RANDOM_TEX_ST_ID = Shader.PropertyToID("_BrickRequestsRandomTex_ST");
         private readonly int SHADER_BRICK_REQUESTS_BUFFER_ID = Shader.PropertyToID("brick_requests");
         private readonly int SHADER_NBR_CHUNKS_PER_RES_LVL_ID = Shader.PropertyToID("nbr_chunks_per_res_lvl");  // TODO: remove
         private readonly int SHADER_NBR_BRICKS_PER_RES_LVL_ID = Shader.PropertyToID("nbr_bricks_per_res_lvl");
@@ -58,6 +59,8 @@ namespace UnityCTVisualizer
         private readonly int SHADER_BRICK_CACHE_DIMS_ID = Shader.PropertyToID("_BrickCacheDims");
         private readonly int SHADER_BRICK_CACHE_NBR_BRICKS = Shader.PropertyToID("_BrickCacheNbrBricks");
         private readonly int SHADER_BRICK_CACHE_VOXEL_SIZE = Shader.PropertyToID("_BrickCacheVoxelSize");
+        private readonly int SHADER_LOD_QUALITY_FACTOR_ID = Shader.PropertyToID("_LODQualityFactor");
+        private readonly int SHADER_MAX_RES_LVL_ID = Shader.PropertyToID("_MaxResLvl");
 
         private int m_max_octree_depth;
         private int m_octree_start_depth = 0;
@@ -113,6 +116,7 @@ namespace UnityCTVisualizer
         private ResidencyNode[] m_residency_octree_data;
         private ComputeBuffer m_brick_requests_cb;
         private ComputeBuffer m_brick_cache_usage_cb;
+        private bool m_is_brick_cache_nativaly_created = false;
         private UInt32[] m_brick_requests_default_data;
 
         // timestamp to keep for caches LRU eviction scheme. Do not set initially to 0
@@ -126,6 +130,7 @@ namespace UnityCTVisualizer
         private Texture3D m_brick_cache = null;
         private Vector3Int m_brick_cache_size;
         private Vector3Int m_brick_cache_nbr_bricks;
+        private UInt32 m_brick_cache_texture_id = 0;
         private IntPtr m_brick_cache_ptr = IntPtr.Zero;
         private float m_brick_cache_size_mb;
 
@@ -331,6 +336,7 @@ namespace UnityCTVisualizer
                     m_material.SetVector(SHADER_VOLUME_DIMS_ID, new Vector3(m_metadata.Dims.x, m_metadata.Dims.y, m_metadata.Dims.z));
                     m_material.SetVector(SHADER_BRICK_CACHE_DIMS_ID, new Vector3(m_brick_cache_size.x, m_brick_cache_size.y, m_brick_cache_size.z));
                     m_material.SetVector(SHADER_BRICK_CACHE_NBR_BRICKS, new Vector3(m_brick_cache_nbr_bricks.x, m_brick_cache_nbr_bricks.y, m_brick_cache_nbr_bricks.z));
+                    m_material.SetInteger(SHADER_MAX_RES_LVL_ID, m_metadata.NbrResolutionLvls - 1);
 
                     // scale mesh to match correct dimensions of the original volumetric data
                     m_transform.localScale = new Vector3(
@@ -484,15 +490,13 @@ namespace UnityCTVisualizer
 
         private IEnumerator CreateNativeBrickCacheTexture3D()
         {
-
             // make sure that you do not create a resource during a render pass
             yield return new WaitForEndOfFrame();
 
             CommandBuffer cmd_buffer = new();
-            UInt32 texture_id = 0;
             CreateTexture3DParams args = new()
             {
-                texture_id = texture_id,
+                texture_id = m_brick_cache_texture_id,
                 width = (UInt32)m_brick_cache_size.x,
                 height = (UInt32)m_brick_cache_size.y,
                 depth = (UInt32)m_brick_cache_size.z,
@@ -509,7 +513,7 @@ namespace UnityCTVisualizer
 
             Marshal.FreeHGlobal(args_ptr);
 
-            m_brick_cache_ptr = API.RetrieveCreatedTexture3D(texture_id);
+            m_brick_cache_ptr = API.RetrieveCreatedTexture3D(m_brick_cache_texture_id);
             if (m_brick_cache_ptr == IntPtr.Zero)
             {
                 throw new NullReferenceException("native bricks cache pointer is nullptr " +
@@ -525,11 +529,11 @@ namespace UnityCTVisualizer
             // (see https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Texture3D.CreateExternalTexture.html)
             m_brick_cache_ptr = m_brick_cache.GetNativeTexturePtr();
 
+            m_is_brick_cache_nativaly_created = true;
         }
 
         private void InitializeBrickRequestsBuffer()
         {
-
             m_brick_requests_cb = new ComputeBuffer(MAX_NBR_BRICK_REQUESTS_PER_FRAME, sizeof(UInt32),
                 ComputeBufferType.Default);
             m_brick_requests_default_data = new UInt32[MAX_NBR_BRICK_REQUESTS_PER_FRAME];
@@ -541,13 +545,11 @@ namespace UnityCTVisualizer
             Graphics.SetRandomWriteTarget(1, m_brick_requests_cb, true);
             GPUResetBrickRequestsBuffer();
             Debug.Log("brick requests buffer initialized successfully");
-
         }
 
 
         private void InitializeBrickCacheUsage()
         {
-
             int brick_cache_usage_size = m_brick_cache_nbr_bricks.x * m_brick_cache_nbr_bricks.y
                 * m_brick_cache_nbr_bricks.z;
             m_brick_cache_usage_cb = new ComputeBuffer(brick_cache_usage_size, sizeof(float));
@@ -574,7 +576,6 @@ namespace UnityCTVisualizer
             Debug.Log($"brick cache usage buffer elements count: {brick_cache_usage_size}");
             Debug.Log($"brick cache usage size: {brick_cache_usage_size * sizeof(Int32) / 1024.0f} KB");
             Debug.Log("brick cache usage initialized successfully");
-
         }
 
 
@@ -615,7 +616,14 @@ namespace UnityCTVisualizer
             m_brick_requests_random_tex_data = new byte[m_brick_requests_random_tex_size * m_brick_requests_random_tex_size];
             m_material.SetTexture(SHADER_BRICK_REQUESTS_RANDOM_TEX_ID, m_brick_requests_random_tex);
 
-            GPUUpdateBrickRequestsRandomTex();
+            for (int i = 0; i < m_brick_requests_random_tex_data.Length; ++i)
+            {
+                // we want random number from [0, 254] because 255 causes the normalized value to be 1.0 which
+                // breaks array indexing in the out-of-core DVR shader
+                m_brick_requests_random_tex_data[i] = (byte)UnityEngine.Random.Range(0, 255);
+            }
+            m_brick_requests_random_tex.SetPixelData(m_brick_requests_random_tex_data, 0);
+            m_brick_requests_random_tex.Apply();
         }
 
 
@@ -737,6 +745,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ModelTFChange += OnModelTFChange;
             VisualizationParametersEvents.ModelAlphaCutoffChange += OnModelAlphaCutoffChange;
             VisualizationParametersEvents.ModelSamplingQualityFactorChange += OnModelSamplingQualityFactorChange;
+            VisualizationParametersEvents.ModelLODQualityFactorChange += OnModelLODQualityFactorChange;
             VisualizationParametersEvents.ModelInterpolationChange += OnModelInterpolationChange;
         }
 
@@ -745,6 +754,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ModelTFChange -= OnModelTFChange;
             VisualizationParametersEvents.ModelAlphaCutoffChange -= OnModelAlphaCutoffChange;
             VisualizationParametersEvents.ModelSamplingQualityFactorChange -= OnModelSamplingQualityFactorChange;
+            VisualizationParametersEvents.ModelLODQualityFactorChange -= OnModelLODQualityFactorChange;
             VisualizationParametersEvents.ModelInterpolationChange -= OnModelInterpolationChange;
 
             if (m_transfer_function != null)
@@ -760,6 +770,31 @@ namespace UnityCTVisualizer
                 m_brick_requests_cb.Release();
                 m_brick_requests_cb.Dispose();
                 m_brick_requests_cb = null;
+            }
+
+            // avoid GPU resources leak ...
+            if (m_is_brick_cache_nativaly_created)
+            {
+                // create a command buffer in which graphics commands will be submitted
+                CommandBuffer cmd_buffer = new();
+
+                DestroyTexture3DParams args = new ()
+                {
+                    texture_id = m_brick_cache_texture_id,
+                };
+
+                IntPtr p_args = Marshal.AllocHGlobal(Marshal.SizeOf<CreateTexture3DParams>());
+                Marshal.StructureToPtr(args, p_args, false);
+                cmd_buffer.IssuePluginEventAndData(TextureSubPlugin.API.GetRenderEventFunc(),
+                    (int)TextureSubPlugin.Event.DestroyTexture3D, p_args);
+
+                // execute the command buffer immediately
+                Graphics.ExecuteCommandBuffer(cmd_buffer);
+
+                // yeah ... idk, couldn't find anything better ...
+                System.Threading.Thread.Sleep(1000);
+
+                Marshal.FreeHGlobal(p_args);
             }
 
             StopAllCoroutines();
@@ -885,6 +920,16 @@ namespace UnityCTVisualizer
             m_brick_requests_cb.GetData(brick_requests);
         }
 
+        private void GPURandomizeBrickRequestsTexOffset()
+        {
+            m_material.SetVector(SHADER_BRICK_REQUESTS_RANDOM_TEX_ST_ID, new Vector4(
+                1,
+                1,
+                UnityEngine.Random.Range(-1.0f, 1.0f),
+                UnityEngine.Random.Range(-1.0f, 1.0f)
+            ));
+        }
+
 
         // holds in-flight (i.e., in the process of being imported) bricks
         // this is samantically a "ConcurrentHashSet" so ignore the values are ignored
@@ -1004,6 +1049,8 @@ namespace UnityCTVisualizer
                 // update CPU brick cache usage and reset it on the GPU
                 CPUUpdateBrickCacheUsageBuffer();
                 GPUResetBrickCacheUsageBuffer();
+
+                GPURandomizeBrickRequestsTexOffset();
 
                 // upload requested bricks to the GPU from the bricks reply queue
                 while (
@@ -1324,18 +1371,6 @@ namespace UnityCTVisualizer
             );
         }
 
-        private void GPUUpdateBrickRequestsRandomTex()
-        {
-            for (int i = 0; i < m_brick_requests_random_tex_data.Length; ++i)
-            {
-                // we want random number from [0, 254] because 255 causes the normalized value to be 1.0 which
-                // breaks array indexing in the out-of-core DVR shader
-                m_brick_requests_random_tex_data[i] = (byte)UnityEngine.Random.Range(0, 255);
-            }
-            m_brick_requests_random_tex.SetPixelData(m_brick_requests_random_tex_data, 0);
-            m_brick_requests_random_tex.Apply();
-        }
-
         private void PropagateResidencyOctreeUpdate(int changed_node_idx)
         {
             // propagate to parents
@@ -1630,6 +1665,11 @@ namespace UnityCTVisualizer
         private void OnModelSamplingQualityFactorChange(float value)
         {
             m_material.SetFloat(SHADER_SAMPLING_QUALITY_FACTOR_ID, value);
+        }
+
+        private void OnModelLODQualityFactorChange(float value)
+        {
+            m_material.SetFloat(SHADER_LOD_QUALITY_FACTOR_ID, value);
         }
 
         private void OnModelTFChange(TF tf, ITransferFunction tf_so)

@@ -1,4 +1,5 @@
 #define BOUNDING_BOX_LONGEST_SEGMENT 1.732050808f  // diagonal of a cube
+#pragma once
 
 /// <summary>
 ///   Parametric description of a ray: r = origin + t * direction
@@ -86,10 +87,10 @@ Ray getRayFromBackface(float3 modelVertex) {
 
     // t_out corresponds to the volume's AABB exit point but the exit point may
     // be reached earlier if the camera is inside the volume.
-    // t_frust corresponds to the frustrum exit
-    float t_frust = 
+    // t_frust_out corresponds to the frustrum exit
+    float t_frust_out = 
       -(ray_origin_viewspace.z + _ProjectionParams.y) / ray_dir_viewspace.z;
-    ray.t_out = min(ray.t_out, t_frust);
+    ray.t_out = min(ray.t_out, t_frust_out);
 
     return ray;
 }

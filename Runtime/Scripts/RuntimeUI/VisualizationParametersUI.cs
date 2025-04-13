@@ -21,6 +21,7 @@ namespace UnityCTVisualizer
         [SerializeField] TMP_Dropdown m_TFDropDown;
         [SerializeField] Slider m_AlphaCutoffSlider;
         [SerializeField] Slider m_SamplingQualityFactorSlider;
+        [SerializeField] Slider m_LODQualityFactorSlider;
         [SerializeField] TMP_Dropdown m_InterpolationDropDown;
 
         /////////////////////////////////
@@ -48,6 +49,7 @@ namespace UnityCTVisualizer
             m_InterpolationDropDown.onValueChanged.AddListener(OnInterDropDownChange);
             m_AlphaCutoffSlider.onValueChanged.AddListener(OnAlphaCutoffSliderChange);
             m_SamplingQualityFactorSlider.onValueChanged.AddListener(OnSamplingQualityFactorSliderChange);
+            m_LODQualityFactorSlider.onValueChanged.AddListener(OnLODQualityFactorSliderChange);
         }
 
         private void OnEnable()
@@ -55,14 +57,21 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ModelTFChange += OnModelTFChange;
             VisualizationParametersEvents.ModelAlphaCutoffChange += OnModelAlphaCutoffChange;
             VisualizationParametersEvents.ModelSamplingQualityFactorChange += OnModelSamplingQualityFactorChange;
+            VisualizationParametersEvents.ModelLODQualityFactorChange += OnModelLODQualityFactorChange;
             VisualizationParametersEvents.ModelInterpolationChange += OnModelInterpolationChange;
         }
 
         private void OnDisable()
         {
+            m_InterpolationDropDown.onValueChanged.RemoveAllListeners();
+            m_AlphaCutoffSlider.onValueChanged.RemoveAllListeners();
+            m_SamplingQualityFactorSlider.onValueChanged.RemoveAllListeners();
+            m_LODQualityFactorSlider.onValueChanged.RemoveAllListeners();
+
             VisualizationParametersEvents.ModelTFChange -= OnModelTFChange;
             VisualizationParametersEvents.ModelAlphaCutoffChange -= OnModelAlphaCutoffChange;
             VisualizationParametersEvents.ModelSamplingQualityFactorChange -= OnModelSamplingQualityFactorChange;
+            VisualizationParametersEvents.ModelLODQualityFactorChange -= OnModelLODQualityFactorChange;
             VisualizationParametersEvents.ModelInterpolationChange -= OnModelInterpolationChange;
         }
 
@@ -97,6 +106,11 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ViewSamplingQualityFactorChange?.Invoke(newVal);
         }
 
+        private void OnLODQualityFactorSliderChange(float val)
+        {
+            VisualizationParametersEvents.ViewLODQualityFactorChange?.Invoke(val);
+        }
+
 
         /////////////////////////////////
         /// MODEL CALLBACKS
@@ -111,19 +125,22 @@ namespace UnityCTVisualizer
 
         private void OnModelAlphaCutoffChange(float value)
         {
-            // do NOT set using value otherwise infinite event callbacks will occur!
             m_AlphaCutoffSlider.SetValueWithoutNotify(value);
         }
 
         private void OnModelSamplingQualityFactorChange(float value)
         {
-            // do NOT set using value otherwise infinite event callbacks will occur!
-            m_SamplingQualityFactorSlider.SetValueWithoutNotify((int)value);
+            m_SamplingQualityFactorSlider.SetValueWithoutNotify(value);
         }
+
+        private void OnModelLODQualityFactorChange(float value)
+        {
+            m_LODQualityFactorSlider.SetValueWithoutNotify(value);
+        }
+
 
         private void OnModelInterpolationChange(INTERPOLATION value)
         {
-            // do NOT set using value otherwise infinite event callbacks will occur!
             m_InterpolationDropDown.SetValueWithoutNotify((int)value);
         }
     }

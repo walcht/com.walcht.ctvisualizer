@@ -43,6 +43,7 @@ namespace UnityCTVisualizer
                 VisualizationParametersEvents.ModelAlphaCutoffChange?.Invoke(value);
             }
         }
+
         private float m_SamplingQualityFactor = 1.0f;
         public float SamplingQualityFactor
         {
@@ -52,6 +53,18 @@ namespace UnityCTVisualizer
                 VisualizationParametersEvents.ModelSamplingQualityFactorChange?.Invoke(value);
             }
         }
+
+        private float m_LODQualityFactor = 2.0f;
+        public float LODQualityFactor
+        {
+            get => m_LODQualityFactor; set
+            {
+                m_LODQualityFactor = Mathf.Clamp(value, 0.10f, 5.0f);
+                VisualizationParametersEvents.ModelLODQualityFactorChange?.Invoke(value);
+            }
+        }
+
+
         private INTERPOLATION m_Interpolation = INTERPOLATION.TRILLINEAR;
         public INTERPOLATION InterpolationMethode
         {
@@ -154,6 +167,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ViewTFChange += OnViewTFChange;
             VisualizationParametersEvents.ViewAlphaCutoffChange += OnViewAlphaCutoffChange;
             VisualizationParametersEvents.ViewSamplingQualityFactorChange += OnViewSamplingQualityFactorChange;
+            VisualizationParametersEvents.ViewLODQualityFactorChange += OnViewLODQualityFactorChange;
             VisualizationParametersEvents.ViewInterpolationChange += OnViewInterpolationChange;
         }
 
@@ -162,6 +176,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ViewTFChange -= OnViewTFChange;
             VisualizationParametersEvents.ViewAlphaCutoffChange -= OnViewAlphaCutoffChange;
             VisualizationParametersEvents.ViewSamplingQualityFactorChange -= OnViewSamplingQualityFactorChange;
+            VisualizationParametersEvents.ViewLODQualityFactorChange -= OnViewLODQualityFactorChange;
             VisualizationParametersEvents.ViewInterpolationChange -= OnViewInterpolationChange;
         }
 
@@ -173,6 +188,11 @@ namespace UnityCTVisualizer
         private void OnViewSamplingQualityFactorChange(float val)
         {
             SamplingQualityFactor = val;
+        }
+
+        private void OnViewLODQualityFactorChange(float val)
+        {
+            LODQualityFactor = val;
         }
 
         private void OnViewInterpolationChange(INTERPOLATION interpolation)

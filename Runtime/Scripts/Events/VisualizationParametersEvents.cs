@@ -1,8 +1,10 @@
 using System;
 using UnityEngine;
 
-namespace UnityCTVisualizer {
-    public struct VolumeInitializationParams {
+namespace UnityCTVisualizer
+{
+    public struct VolumeInitializationParams
+    {
         public int brickSize;
         public int highestResolutionLvl;
         public int nbrImporterThreads;
@@ -11,7 +13,8 @@ namespace UnityCTVisualizer {
         public int CPUBrickCacheSizeMB;
     }
 
-    public static class VisualizationParametersEvents {
+    public static class VisualizationParametersEvents
+    {
         ////////////////////////////////
         /// Invoked by Models (SOs)
         ////////////////////////////////
@@ -19,6 +22,7 @@ namespace UnityCTVisualizer {
         public static Action<float> ModelAlphaCutoffChange;
         public static Action<INTERPOLATION> ModelInterpolationChange;
         public static Action<float> ModelSamplingQualityFactorChange;
+        public static Action<float> ModelLODQualityFactorChange;
 
         ////////////////////////////////
         /// Invoked by Views (UIs)
@@ -27,6 +31,7 @@ namespace UnityCTVisualizer {
         public static Action<float> ViewAlphaCutoffChange;
         public static Action<INTERPOLATION> ViewInterpolationChange;
         public static Action<float> ViewSamplingQualityFactorChange;
+        public static Action<float> ViewLODQualityFactorChange;
     }
 }
 

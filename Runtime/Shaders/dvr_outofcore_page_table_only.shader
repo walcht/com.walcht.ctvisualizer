@@ -16,6 +16,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
         _BrickRequestsRandomTex("Brick requests random (uniform) texture", 2D) = "white" {}
 		_AlphaCutoff("Opacity Cutoff", Range(0.0, 1.0)) = 0.95
         _SamplingQualityFactor("Sampling quality factor (multiplier) [type: float]", float) = 1.00
+        _LODQualityFactor("LOD quality factor", Range(0.1, 5)) = 0.2
         _VolumeTexelSize("Size of one voxel (or texel) in the volumetric dataset", Vector) = (1, 1, 1)
         _BrickCacheDims("Brick cache dimensions [type: int]", Vector) = (1, 1, 1)
         _BrickCacheNbrBricks("Number of bricks along each dimension of the brick cache [type: int]", Vector) = (1, 1, 1)
@@ -41,7 +42,8 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
             #include "UnityCG.cginc"
             #include "Include/common.cginc"
 
-            // #define VISUALIZE_RANDOM_BRICK_REQUESTS_TEX 1
+            #define VISUALIZE_RANDOM_BRICK_REQUESTS_TEX 1
+            #define VISUALIZE_PAGE_TABLE_ENTRY_SPACE_SKIPPING 0
 
             #define INVALID_BRICK_ID 0x80000000
             #define BRICK_CACHE_SLOT_USED 1
@@ -64,6 +66,9 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
 
             float _AlphaCutoff = 254.0f / 255.0f;
             float _SamplingQualityFactor = 1.0f;
+            float _LODQualityFactor = 1.0f;
+            int _MaxResLvl = 0;
+
 
             // this should have been an uint4 but Unity ... Just use a float4, you
             // don't want to deal with the crap that will happen if you use any other type ...
@@ -109,22 +114,35 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
             /// <summary>
             ///     Uses viewing parameters to determine the desired resolution level for the provided sample point.
             /// </summary>
-            int chooseDesiredResolutionLevel(float3 p) {
+            int chooseDesiredResolutionLevel(float3 p)
+            {
+                // distance-based approach - convert back to model space then view space
+                float d = length(UnityObjectToViewPos(p + float3(-0.5f, -0.5f, -0.5f)));
                 return 0;
+                // return min(floor(d / _LODQualityFactor), _MaxResLvl);
+            }
+
+            float adpatSamplingDistance(float step_size, int res_lvl)
+            {
+                return step_size * (1 << res_lvl);
             }
 
             /// <summary>
             ///     Computes a delta distance along a given ray position and direction so that p + dir * delta is
             ///     the exiting intersection of the provided node.
             /// </summary>
-            float skip_page_directory_entry(float3 p, float3 dir, int res_lvl) {
-
+            float skip_page_directory_entry(float3 p, float3 dir, int res_lvl)
+            {
                 // a page directory entry is mapped to a spatial extent in the volumetric
                 // dataset. This extent has to be skipped.
                 Box aabb;
                 float3 sides = (_BrickSize << res_lvl) * _VolumeTexelSize;
-                aabb.min = float3((p * _PageDirDims[res_lvl]) * sides);
-                aabb.max = aabb.min + sides;
+                aabb.min = float3(int3(p / sides) * sides);
+                aabb.max = float3(
+                    aabb.min.x + sides.x,
+                    aabb.min.y + sides.y,
+                    aabb.min.z + sides.z
+                );
                 return slabs(p, dir, aabb);
             }
 
@@ -185,7 +203,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
                 int3 prev_page_dir_offset = int3(-1, -1, -1);
                 float4 page_dir_entry;
 
-#ifdef VISUALIZE_RANDOM_BRICK_REQUESTS_TEX
+#if VISUALIZE_RANDOM_BRICK_REQUESTS_TEX
                 return fixed4(tex2Dlod(_BrickRequestsRandomTex, float4(interpolated.uv, 0, 0)).r, 0.0f, 0.0f, 1.0f);
 #endif
 
@@ -195,6 +213,9 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
                 {
                     float3 accm_ray = ray.origin + ray.dir * t;
                     int res_lvl = chooseDesiredResolutionLevel(accm_ray);
+
+                    // adaptive ray sampling technique
+                    step_size = adpatSamplingDistance(step_size, res_lvl);
 
                     // sample current position
                     float sampled_density = 0.0f;
@@ -230,26 +251,30 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
 
                     else if (paging_flag == HOMOGENEOUS_PAGE_TABLE_ENTRY)
                     {
-                        return fixed4(0.0f, 0.0f, 1.0f, 1.0f);
                         // skip the empty page directory entry
-                        t += step_size; // skip_page_directory_entry(accm_ray, ray.dir, res_lvl) + epsilon;
+                        float a = skip_page_directory_entry(accm_ray, ray.dir, res_lvl);
+
+#if VISUALIZE_PAGE_TABLE_ENTRY_SPACE_SKIPPING 
+                        if (a > 0) {
+                            return fixed4(0.0f, 1.0f, 0.0f, 1.0f);
+                        } else {
+                            return fixed4(1.0f, 0.0f, 0.0f, 1.0f);
+                        }
+#endif
+
+                        t += skip_page_directory_entry(accm_ray, ray.dir, res_lvl) + epsilon;
                         sampled_density = page_dir_entry.x / 255.0f;
                     }
 
                     else
                     {
-                        // skip the empty unammped directory entry
-                        t += step_size; // skip_page_directory_entry(accm_ray, ray.dir, res_lvl) + epsilon;
-
-                        // TODO: only report brick request if it is not the same as last one
-                        // try to report brick request
                         if (nbr_requested_bricks < _MaxNbrBrickRequestsPerRay) {
                            requests[nbr_requested_bricks] = getBrickID(accm_ray, res_lvl);
                            ++nbr_requested_bricks;
                         }
                         
                         // continue because there is nothing to be sampled
-                        continue;
+                        break;
                     }
 
                     // apply transfer function and composition
