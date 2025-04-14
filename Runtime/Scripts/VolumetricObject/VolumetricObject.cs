@@ -38,7 +38,6 @@ namespace UnityCTVisualizer
         private readonly int SHADER_BRICK_REQUESTS_RANDOM_TEX_ID = Shader.PropertyToID("_BrickRequestsRandomTex");
         private readonly int SHADER_BRICK_REQUESTS_RANDOM_TEX_ST_ID = Shader.PropertyToID("_BrickRequestsRandomTex_ST");
         private readonly int SHADER_BRICK_REQUESTS_BUFFER_ID = Shader.PropertyToID("brick_requests");
-        private readonly int SHADER_NBR_CHUNKS_PER_RES_LVL_ID = Shader.PropertyToID("nbr_chunks_per_res_lvl");  // TODO: remove
         private readonly int SHADER_NBR_BRICKS_PER_RES_LVL_ID = Shader.PropertyToID("nbr_bricks_per_res_lvl");
         private readonly int SHADER_RESIDENCY_OCTREE_BUFFER_ID = Shader.PropertyToID("residency_octree");
         private readonly int SHADER_OCTREE_START_DEPTH_ID = Shader.PropertyToID("_OctreeStartDepth");
@@ -46,7 +45,6 @@ namespace UnityCTVisualizer
         private readonly int SHADER_MAX_NBR_BRICK_REQUESTS_PER_RAY_ID = Shader.PropertyToID("_MaxNbrBrickRequestsPerRay");
         private readonly int SHADER_MAX_NBR_BRICK_REQUESTS_ID = Shader.PropertyToID("_MaxNbrBrickRequests");
         private readonly int SHADER_BRICK_SIZE_ID = Shader.PropertyToID("_BrickSize");
-        private readonly int SHADER_CHUNK_SIZE_ID = Shader.PropertyToID("_ChunkSize");
         private readonly int SHADER_VOLUME_DIMS_ID = Shader.PropertyToID("_VolumeDims");
         private readonly int SHADER_VOLUME_TEXEL_SIZE_ID = Shader.PropertyToID("_VolumeTexelSize");
         private readonly int SHADER_PAGE_DIR_DIMS_ID = Shader.PropertyToID("_PageDirDims");
@@ -57,14 +55,14 @@ namespace UnityCTVisualizer
         private readonly int SHADER_BRICK_CACHE_NBR_BRICKS = Shader.PropertyToID("_BrickCacheNbrBricks");
         private readonly int SHADER_BRICK_CACHE_VOXEL_SIZE = Shader.PropertyToID("_BrickCacheVoxelSize");
         private readonly int SHADER_LOD_QUALITY_FACTOR_ID = Shader.PropertyToID("_LODQualityFactor");
-        private readonly int SHADER_MAX_RES_LVL_ID = Shader.PropertyToID("_MaxResLvl"); // _MaxResLvl
+        private readonly int SHADER_MAX_RES_LVL_ID = Shader.PropertyToID("_MaxResLvl");
 
         private int m_max_octree_depth;
         private int m_octree_start_depth = 0;
-        private readonly int MAX_NBR_BRICK_REQUESTS_PER_RAY = 4;
-        private readonly int MAX_NBR_BRICK_REQUESTS_PER_FRAME = 16;
+        private readonly int MAX_NBR_BRICK_REQUESTS_PER_RAY = 2;
+        private readonly int MAX_NBR_BRICK_REQUESTS_PER_FRAME = 32;
         private readonly int MAX_IN_FLIGHT_BRICK_IMPORTS = 6;
-        private readonly int MAX_NBR_BRICK_UPLOADS_PER_FRAME = 2;
+        private readonly int MAX_NBR_BRICK_UPLOADS_PER_FRAME = 8;
         public static readonly UInt32 INVALID_BRICK_ID = 0x80000000;
         private readonly UInt16 MAPPED_PAGE_TABLE_ENTRY = 2;
         private readonly UInt16 UNMAPPED_PAGE_TABLE_ENTRY = 1;
@@ -268,6 +266,17 @@ namespace UnityCTVisualizer
                     });
                     t.ContinueWith(t => { Debug.LogException(t.Exception); }, TaskContinuationOptions.OnlyOnFaulted);
 
+                    // set remaning shader properties
+                    float max_volume_dims = Mathf.Max(m_metadata.Dims.x, m_metadata.Dims.y, m_metadata.Dims.z);
+                    m_material.SetFloat("_MaxVolumeDim", max_volume_dims);
+
+                    // scale mesh to match correct dimensions of the original volumetric data
+                    m_transform.localScale = new Vector3(
+                         MM_TO_METERS * m_metadata.VoxelDims.x * m_brick_cache_size.x,
+                         MM_TO_METERS * m_metadata.VoxelDims.y * m_brick_cache_size.y,
+                         MM_TO_METERS * m_metadata.VoxelDims.z * m_brick_cache_size.z
+                    );
+
                     // finally start the loop
                     StartCoroutine(InCoreLoop());
 
@@ -320,20 +329,12 @@ namespace UnityCTVisualizer
 
                     // initialize remaining shader variables/properties
 
-                    // create an array to hold nbr chunks per resolution level
-                    Vector4[] nbr_chunks_per_res_lvl = new Vector4[m_metadata.NbrChunksPerResolutionLvl.Length];
-                    for (int i = 0; i < m_metadata.NbrChunksPerResolutionLvl.Length; ++i)
-                        nbr_chunks_per_res_lvl[i] = new Vector4(m_metadata.NbrChunksPerResolutionLvl[i].x,
-                            m_metadata.NbrChunksPerResolutionLvl[i].y, m_metadata.NbrChunksPerResolutionLvl[i].z);
-                    m_material.SetVectorArray(SHADER_NBR_CHUNKS_PER_RES_LVL_ID, nbr_chunks_per_res_lvl);
-
                     // set remaining shader variables
                     m_material.SetInteger(SHADER_OCTREE_START_DEPTH_ID, m_octree_start_depth);
                     m_material.SetInteger(SHADER_MAX_OCTREE_DEPTH_ID, m_max_octree_depth);
                     m_material.SetInteger(SHADER_MAX_NBR_BRICK_REQUESTS_PER_RAY_ID, MAX_NBR_BRICK_REQUESTS_PER_RAY);
                     m_material.SetInteger(SHADER_MAX_NBR_BRICK_REQUESTS_ID, MAX_NBR_BRICK_REQUESTS_PER_FRAME);
                     m_material.SetInteger(SHADER_BRICK_SIZE_ID, m_brick_size);
-                    m_material.SetInteger(SHADER_CHUNK_SIZE_ID, m_metadata.ChunkSize);
                     m_material.SetVector(SHADER_VOLUME_DIMS_ID, new Vector3(m_metadata.Dims.x, m_metadata.Dims.y, m_metadata.Dims.z));
                     m_material.SetVector(SHADER_BRICK_CACHE_DIMS_ID, new Vector3(m_brick_cache_size.x, m_brick_cache_size.y, m_brick_cache_size.z));
                     m_material.SetVector(SHADER_BRICK_CACHE_NBR_BRICKS, new Vector3(m_brick_cache_nbr_bricks.x, m_brick_cache_nbr_bricks.y, m_brick_cache_nbr_bricks.z));
@@ -375,8 +376,6 @@ namespace UnityCTVisualizer
 
                     m_brick_cache_nbr_bricks = new(m_brick_cache_size.x / m_brick_size,
                         m_brick_cache_size.y / m_brick_size, m_brick_cache_size.z / m_brick_size);
-
-                    m_brick_cache_brick_residency = new HashSet<UInt32>();
 
                     // clear any previously set UAVs
                     Graphics.ClearRandomWriteTargets();
@@ -814,7 +813,6 @@ namespace UnityCTVisualizer
         /// </exception>
         public IEnumerator InCoreLoop()
         {
-
             // make sure to only start when all dependencies are initialized
             yield return new WaitUntil(() => (m_volume_dataset != null) && (m_transfer_function != null)
                 && (m_brick_cache != null));
@@ -823,24 +821,32 @@ namespace UnityCTVisualizer
             Debug.Log("started loading all volume bricks into GPU ...");
 
             long nbr_bricks_uploaded = 0;
+
             long total_nbr_bricks = m_metadata.NbrChunksPerResolutionLvl[m_resolution_lvl].x *
                 m_metadata.NbrChunksPerResolutionLvl[m_resolution_lvl].y *
                 m_metadata.NbrChunksPerResolutionLvl[m_resolution_lvl].z *
                 (int)Math.Pow(m_metadata.ChunkSize / m_brick_size, 3);
+
             int nbr_bricks_uploaded_per_frame = 0;
+
             CommandBuffer cmd_buffer = new();
+
             GCHandle[] handles = new GCHandle[MAX_NBR_BRICK_UPLOADS_PER_FRAME];
+
             Vector3 brick_scale = new(
                 m_brick_size / (float)(m_metadata.NbrChunksPerResolutionLvl[m_resolution_lvl].x * m_metadata.ChunkSize),
                 m_brick_size / (float)(m_metadata.NbrChunksPerResolutionLvl[m_resolution_lvl].y * m_metadata.ChunkSize),
                 m_brick_size / (float)(m_metadata.NbrChunksPerResolutionLvl[m_resolution_lvl].z * m_metadata.ChunkSize)
             );
 
+            long brick_size_cubed = m_brick_size * m_brick_size * m_brick_size;
+
             while (nbr_bricks_uploaded < total_nbr_bricks)
             {
-
                 // wait until current frame rendering is done ...
                 yield return new WaitForEndOfFrame();
+
+                GPUUpdateVisualizationParams();
 
                 // we can safely assume that bricks uploaded to GPU in previous frame are done
                 nbr_bricks_uploaded += nbr_bricks_uploaded_per_frame;
@@ -857,12 +863,25 @@ namespace UnityCTVisualizer
                     m_brick_reply_queue.TryDequeue(out UInt32 brick_id)
                 )
                 {
-
                     // we are sending a managed object to unmanaged thread (i.e., C++) the object has to be pinned to a
                     // fixed location in memory during the plugin call
                     var brick = m_cpu_cache.Get(brick_id);
                     Assert.IsNotNull(brick);
-                    handles[nbr_bricks_uploaded_per_frame] = GCHandle.Alloc(brick.data, GCHandleType.Pinned);
+
+                    if (brick.data == null)
+                    {
+                        byte[] data = new byte[brick_size_cubed];
+                        for (int i = 0; i < brick_size_cubed; ++i)
+                        {
+                            data[i] = brick.min;
+                        }
+                        handles[nbr_bricks_uploaded_per_frame] = GCHandle.Alloc(data, GCHandleType.Pinned);
+                    }
+                    else
+                    {
+                        handles[nbr_bricks_uploaded_per_frame] = GCHandle.Alloc(brick.data, GCHandleType.Pinned);
+                    }
+
 
                     // compute where the brick offset within the brick cache
                     m_volume_dataset.ComputeVolumeOffset(brick_id, m_brick_size, out Int32 x, out Int32 y, out Int32 z);
@@ -950,10 +969,7 @@ namespace UnityCTVisualizer
         /// </param>
         private void ImportBricksIntoMemoryCache(UInt32[] brick_ids, int nbr_importer_threads = -1)
         {
-            if (m_in_flight_brick_imports.Count > MAX_IN_FLIGHT_BRICK_IMPORTS)
-            {
-                return;
-            }
+            // if (m_in_flight_brick_imports.Count > MAX_IN_FLIGHT_BRICK_IMPORTS) { return; }
 
             UInt32[] filtered_brick_ids = new UInt32[MAX_NBR_BRICK_REQUESTS_PER_FRAME];
 

@@ -1,4 +1,4 @@
-Shader "UnityCTVisualizer/dvr_incore_baseline"
+Shader "UnityCTVisualizer/ic_dvr_shader"
 {
     Properties
 	{
@@ -6,10 +6,9 @@ Shader "UnityCTVisualizer/dvr_incore_baseline"
         // a material with this shader in Unity Editor
 	    [HideInInspector] _BrickCache("Brick Cache", 3D) = "" {}
         [HideInInspector] _TFColors("Transfer Function Colors Texture", 2D) = "" {}
+
 		_AlphaCutoff("Opacity Cutoff", Range(0.0, 1.0)) = 0.95
-        // should be an int, but Unity crashes when calling Material.SetInteger()
-        // see: https://discussions.unity.com/t/crash-when-calling-material-setinteger-with-int-shaderlab-properties/891920
-        _MaxIterations("Maximum number of samples to take along longest path (cube diagonal)", float) = 512
+        _SamplingQualityFactor("Sampling quality factor (multiplier) [type: float]", Range(0.1, 3.0)) = 1.00
 	}
 
 	SubShader {
@@ -30,8 +29,11 @@ Shader "UnityCTVisualizer/dvr_incore_baseline"
 
             sampler3D _BrickCache;
             sampler2D _TFColors;
-            float _AlphaCutoff;
-            float _MaxIterations;
+
+            float _AlphaCutoff = 254.0f / 255.0f;
+            float _SamplingQualityFactor = 1.0f;
+            float _MaxVolumeDim = 1;
+
 
             struct appdata {
                 float4 modelVertex: POSITION;
@@ -68,25 +70,27 @@ Shader "UnityCTVisualizer/dvr_incore_baseline"
             {
                 // initialize a ray in model space
                 Ray ray = flipRay(getRayFromBackface(interpolated.modelVertex));
-                // distance of segment intersecting with AABB volume
-                float seg_len = ray.t_out;  // because t_in == 0
-                float step_size = BOUNDING_BOX_LONGEST_SEGMENT / _MaxIterations;
-                int num_iterations = (int)clamp(seg_len / step_size, 1, (int)_MaxIterations);
-                float3 delta_step = ray.dir * step_size;
+
+                float step_size =  1.0f / (_MaxVolumeDim * _SamplingQualityFactor);
+                float epsilon = step_size / 2.0f;
                 float4 accm_color = float4(0.0f, 0.0f, 0.0f, 0.0f);
-                float3 accm_ray = ray.origin;
-                // TODO:    improve sampling loop (maybe use unroll with outside check?)
-                for (int iter = 0; iter < num_iterations; ++iter)
+
+                // start from epsilon to avoid out-of-volume rendering artifacts due to
+                // floating point precision
+                for (float t = epsilon; t < ray.t_out; t += step_size)
                 {
+                    float3 accm_ray = ray.origin + ray.dir * t;
+
                     float sampled_density = tex3Dlod(_BrickCache, float4(accm_ray, 0.0f)).r;
                     float4 src = tex2Dlod(_TFColors, float4(sampled_density, 0.0f, 0.0f, 0.0f));
-                    // move to next sample point
-                    accm_ray += delta_step;
+
                     // blending
                     src.rgb *= src.a;
-                    accm_color = (1.0f - accm_color.a) * src + accm_color;
+                    accm_color += (1.0f - accm_color.a) * src;
+
                     // early-ray-termination optimization technique
                     if (accm_color.a > _AlphaCutoff) break;
+ 
                 }
                 return accm_color;
             }

@@ -100,7 +100,7 @@ public class MemoryCache<T> where T : unmanaged
                 Debug.LogWarning("homogeneous brick's data array is not set to null!");
             }
             m_cache.TryAdd(id, new(entry));
-            Debug.Log($"homogeneous brick {id} added to CPU brick cache");
+            // Debug.Log($"homogeneous brick {id} added to CPU brick cache");
             return;
         }
 

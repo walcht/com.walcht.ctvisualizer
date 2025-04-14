@@ -6,7 +6,7 @@
     multi-resolution page table hierarchy.
 */
 
-Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
+Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
 {
     Properties
 	{
@@ -65,7 +65,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
 
             float _AlphaCutoff = 254.0f / 255.0f;
             float _SamplingQualityFactor = 1.0f;
-            float _LODQualityFactor = 3.0f;
+            float _LODQualityFactor = 1.0f;
             int _MaxResLvl = 0;
 
 
@@ -119,7 +119,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
             {
                 // distance-based approach - convert back to model space then view space
                 float d = length(UnityObjectToViewPos(p - float3(0.5f, 0.5f, 0.5f)));
-                return 0; // min(floor(d / _LODQualityFactor), _MaxResLvl);
+                return min(floor(d / _LODQualityFactor), _MaxResLvl);
             }
 
             float adpatSamplingDistance(float step_size, int res_lvl)
@@ -249,6 +249,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
                     {
                         /// REMOVE
                         return fixed4(0.0f, 1.0f, 0.0f, 1.0f);
+                        /// REMOVE
 
                         // skip the empty page directory entry
                         float a = max(skip_page_directory_entry(accm_ray, ray.dir, res_lvl) + epsilon, step_size);

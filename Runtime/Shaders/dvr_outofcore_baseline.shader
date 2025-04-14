@@ -20,21 +20,21 @@ Shader "UnityCTVisualizer/DVR_outofcore"
 	{
 	    [HideInInspector] _BrickCache("Brick Cache", 3D) = "" {}
         [HideInInspector] _TFColors("Transfer Function Colors Texture", 2D) = "" {}
-        [HideInInspector] _PageTable("Top level multi-resolution page table", 3D) = "" {}
-        _BrickRequestsRandomTex("Brick requests random (uniform) texture", 2D) = "" {}
+        [HideInInspector] _PageDir("Top level multi-resolution page directory", 3D) = "" {}
+        _BrickRequestsRandomTex("Brick requests random (uniform) texture", 2D) = "white" {}
 		_AlphaCutoff("Opacity Cutoff", Range(0.0, 1.0)) = 0.95
-        _MaxIterations("Maximum number of samples to take along longest path (cube diagonal) [type: int]", float) = 512
-        _MaxOctreeDepth("Maximum depth of the Residency Octree [type: int]", Integer) = 5
-        _OctreeStartDepth("Depth at which to start the Residency Octree traversal [type: int]", Integer) = 0
-        _VolumeDims("Original volume dimensions [type: int]", Vector) = (1, 1, 1)
-        _PageTableDims("Page table dimensions [type: int]", Vector) = (1, 1, 1)
+        _SamplingQualityFactor("Sampling quality factor (multiplier) [type: float]", Range(0.1, 3.0)) = 1.00
+        _LODQualityFactor("LOD quality factor", Range(0.1, 5)) = 3
+        // _MaxResLvl("Max allowed resolution level (inclusive)", Integer) = 0
+        _VolumeTexelSize("Size of one voxel (or texel) in the volumetric dataset", Vector) = (1, 1, 1)
         _BrickCacheDims("Brick cache dimensions [type: int]", Vector) = (1, 1, 1)
         _BrickCacheNbrBricks("Number of bricks along each dimension of the brick cache [type: int]", Vector) = (1, 1, 1)
         _BrickSize("Brick size [type: int]", Integer) = 128
-        _ChunkSize("Chunk size (i.e., smallest accessible volume subregion in persistent memory", Integer) = 128
         _MaxNbrBrickRequestsPerRay("Max number of brick requests per ray", Integer) = 4
         _MaxNbrBrickRequests("Max number of brick requests per frame", Integer) = 16
 
+        _MaxOctreeDepth("Maximum depth of the Residency Octree [type: int]", Integer) = 5
+        _OctreeStartDepth("Depth at which to start the Residency Octree traversal [type: int]", Integer) = 0
 	}
 
 	SubShader {
@@ -52,43 +52,67 @@ Shader "UnityCTVisualizer/DVR_outofcore"
 
             #include "UnityCG.cginc"
             #include "Include/common.cginc"
+
+            #define VISUALIZE_RANDOM_BRICK_REQUESTS_TEX 0
+            #define VISUALIZE_PAGE_TABLE_ENTRY_SPACE_SKIPPING 0
+
             #define INVALID_BRICK_ID 0x80000000
-            #define MAX_ALLOWED_MAX_NBR_BRICK_REQUESTS_PER_RAY 12
             #define BRICK_CACHE_SLOT_USED 1
-            #define UNMAPPED_PAGE_TABLE_ENTRY 0
+
+            #define MAX_ALLOWED_MAX_NBR_BRICK_REQUESTS_PER_RAY 12
+            #define MAX_ALLOWED_NBR_RESOLUTION_LVLS 16
+
+            #define MAPPED_PAGE_TABLE_ENTRY 2
+            #define UNMAPPED_PAGE_TABLE_ENTRY 1
+            #define HOMOGENEOUS_PAGE_TABLE_ENTRY 0
 
             // Visualization Parameters
             sampler3D _BrickCache;
-            // TODO: use one sampler for these 2D textures
             sampler2D _TFColors;
+
             sampler2D _BrickRequestsRandomTex;
-            sampler3D _PageTable;
-            float _AlphaCutoff;
-            float _MaxIterations;
+            float4 _BrickRequestsRandomTex_ST;
+
+
+            float _AlphaCutoff = 254.0f / 255.0f;
+            float _SamplingQualityFactor = 1.0f;
+            float _LODQualityFactor = 3.0f;
+            int _MaxResLvl = 3;
+
+
+            // this should have been an uint4 but Unity ... Just use a float4, you
+            // don't want to deal with the crap that will happen if you use any other type ...
+            Texture3D<float4> _PageDir;
+
+            /// <summary>
+            ///     dimensions (x, y, z) of the page directory in each resolution level.
+            /// </summary>
+            float4 _PageDirDims[MAX_ALLOWED_NBR_RESOLUTION_LVLS];
+
+            uint4 _PageDirBase[MAX_ALLOWED_NBR_RESOLUTION_LVLS];
+
+            float3 _BrickCacheDims;
+
+            // the size of a voxel in the brick cache
+            // set to: 1.0f / _BrickCacheDims
+            float4 _BrickCacheVoxelSize;
+
+            int _BrickSize = 128;
+            int3 _BrickCacheNbrBricks;
+
+            // index is the resolution level and (x, y, z) are the total number
+            // of voxels of the volumetric dataset along each of its dimensions.
+            uint4 _VolumeDims[MAX_ALLOWED_NBR_RESOLUTION_LVLS];
+            float3 _VolumeTexelSize;
+
+            // should be set to nbr_chunks_per_res_lvl[res_lvl] * _ChunkSize / _BrickSize
+            uint4 nbr_bricks_per_res_lvl[MAX_ALLOWED_NBR_RESOLUTION_LVLS];
+            
+            int _MaxNbrBrickRequestsPerRay = 4;
+            int _MaxNbrBrickRequests = 16;
 
             int _MaxOctreeDepth;
             int _OctreeStartDepth;
-            float3 _VolumeDims;
-            float3 _PageTableDims;
-            float3 _BrickCacheDims;
-            int _BrickSize;
-            int _ChunkSize;
-            int _MaxNbrBrickRequestsPerRay;
-            int _MaxNbrBrickRequests;
-            float3 _BrickCacheNbrBricks;
-            float3 nbr_chunks_per_res_lvl[16];  // (16 - 1) is the maximum allowed resolution level
-            
-
-            uniform RWStructuredBuffer<uint> brick_requests : register(u1);
-
-            /// <summary>
-            ///     Each entry holds a boolean whether the brick, identified by its index,
-            ///     has been used in this frame. Negative value indicates that the brick
-            ///     spot has not been used in this frame. Index is the brick ID within
-            ///     the brick cache (follows the same order as residency octree node
-            ///     children - see above)
-            /// </summary>
-            uniform RWStructuredBuffer<float> brick_cache_usage : register(u2);
 
             /// <summary>
             ///
@@ -201,11 +225,26 @@ Shader "UnityCTVisualizer/DVR_outofcore"
             };
             uniform StructuredBuffer<ResidencyNode> residency_octree;
 
+            uniform RWStructuredBuffer<uint> brick_requests : register(u1);
+
+            /// <summary>
+            ///     Each entry holds a boolean whether the brick, identified by its index,
+            ///     has been used in this frame. Negative value indicates that the brick
+            ///     spot has not been used in this frame. Index is the brick ID within
+            ///     the brick cache (follows the same order as residency octree node
+            ///     children - see above)
+            /// </summary>
+            uniform RWStructuredBuffer<float> brick_cache_usage : register(u2);
+
+
             /// <summary>
             ///     Uses viewing parameters to determine the desired resolution level for the provided sample point.
             /// </summary>
-            int chooseDesiredResolutionLevel(float3 p) {
-                return 0;
+            int chooseDesiredResolutionLevel(float3 p)
+            {
+                // distance-based approach - convert back to model space then view space
+                // float d = length(UnityObjectToViewPos(p - float3(0.5f, 0.5f, 0.5f)));
+                return 0;// min(floor(d / _LODQualityFactor), _MaxResLvl);
             }
 
             /// <summary>
@@ -243,10 +282,13 @@ Shader "UnityCTVisualizer/DVR_outofcore"
             }
 
             uint getBrickID(float3 p, int res_lvl) {
-                int3 nbr_bricks = nbr_chunks_per_res_lvl[res_lvl] * _ChunkSize / _BrickSize;
-                int3 d = (p * _VolumeDims) / (float)(_BrickSize << res_lvl);
-                return (d.z * (nbr_bricks.x * nbr_bricks.y) + d.y * (nbr_bricks.x) + d.x)
-                    | (res_lvl << 26);
+                uint3 d = (p * _VolumeDims[res_lvl]) / _BrickSize;
+                return (d.z * (nbr_bricks_per_res_lvl[res_lvl].x * nbr_bricks_per_res_lvl[res_lvl].y)
+                    + d.y * (nbr_bricks_per_res_lvl[res_lvl].x) + d.x) | (res_lvl << 26);
+            }
+
+            int3 get_page_dir_offset(float3 p, int res_lvl) {
+                return int3((p * _VolumeDims[0]) / (_BrickSize << res_lvl));
             }
 
             /// <summary>
@@ -257,27 +299,28 @@ Shader "UnityCTVisualizer/DVR_outofcore"
                 return 8 * parent_idx + 1 + (4 * offset.z + 2 * offset.y + offset.x);
             }
 
-            bool tryGetBrick(float3 p, int res_lvl, out float3 brick_pos, out float3 brick_offset) {
-                // the virtualized volume dimensions are NOT necessarily the same
-                // as the page table dims!
-                float3 t = (p * _VolumeDims) / (_PageTableDims * (_BrickSize << res_lvl));  // TODO: _SubPageTableDims[res_lvl]
-                brick_pos = tex3Dlod(_PageTable, float4(t, 0.0f));
+            bool tryGetBrick(float3 p, int res_lvl, out float4 brick_pos, out float3 offset_within_brick)
+            {
+                int3 page_dir_offset = get_page_dir_offset(p, res_lvl);
+                int4 page_dir_addrs = int4(_PageDirBase[res_lvl].xyz  + page_dir_offset, 0);
+                page_dir_entry = _PageDir.Load(page_dir_addrs);
 
-                int3 d = (p * _VolumeDims) / (_BrickSize << res_lvl);
-                brick_offset = p - d * ((_BrickSize << res_lvl) / _VolumeDims);
-                // if R channel of the brick is 0 => brick is NOT in brick cache
-                if (brick_pos.x != UNMAPPED_PAGE_TABLE_ENTRY) {
-                    // update the brick cache usage
-                    float3 b =  _BrickSize / _BrickCacheDims;
-                    int brick_idx = round(_BrickCacheNbrBricks.x * _BrickCacheNbrBricks.y * brick_pos.z / b.z
-                        + _BrickCacheNbrBricks.x * brick_pos.y / b.y
-                        + brick_pos.x / b.x);
-                    // set to any value other than 0 to indicate that this brick cache slot was
-                    // used in this frame
-                    brick_cache_usage[brick_idx] = BRICK_CACHE_SLOT_USED;
-                    return true;
-                }
-                return false;
+                uint paging_flag = page_dir_entry.w;
+                if (paging_flag == UNMAPPED_PAGE_TABLE_ENTRY) return false;
+
+                offset_within_brick = fmod(p * _VolumeDims[res_lvl], (float)_BrickSize) * _BrickCacheVoxelSize.xyz;
+                brick_pos = float4(page_dir_entry.xyz + offset_within_brick, 0);
+                sampled_density = tex3Dlod(_BrickCache, brick_pos).r;
+
+                // then report the brick cache usage for this frame
+                int brick_idx =
+                    (_BrickCacheNbrBricks.x * _BrickCacheNbrBricks.y * round(page_dir_entry.z * _BrickCacheNbrBricks.z))
+                    + (_BrickCacheNbrBricks.x * round(page_dir_entry.y * _BrickCacheNbrBricks.y)) +
+                    round(page_dir_entry.x * _BrickCacheNbrBricks.x);
+                // indicate that this brick cache slot was used in this frame
+                brick_cache_usage[brick_idx] = BRICK_CACHE_SLOT_USED;
+
+                return true;
             }
 
             /// <summary>
@@ -319,7 +362,7 @@ Shader "UnityCTVisualizer/DVR_outofcore"
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
 
                 output.clipVertex = UnityObjectToClipPos(v.modelVertex);
-                output.uv = v.uv;
+                output.uv = TRANSFORM_TEX(v.uv, _BrickRequestsRandomTex);
                 output.modelVertex = v.modelVertex.xyz;
                 return output;
             }
@@ -331,24 +374,37 @@ Shader "UnityCTVisualizer/DVR_outofcore"
 
                 // initialize a ray in model space
                 Ray ray = flipRay(getRayFromBackface(interpolated.modelVertex));
-                // distance of segment intersecting with AABB volume
-                float seg_len = ray.t_out;  // because t_in == 0
-                float step_size = BOUNDING_BOX_LONGEST_SEGMENT / _MaxIterations;
-                float epsilon = step_size / 10.0f;
+
+                float step_size =  1.0f / (max(_VolumeDims[0].x, max(_VolumeDims[0].y, _VolumeDims[0].z)) * _SamplingQualityFactor);
+                float epsilon = step_size / 100.0f;
                 float4 accm_color = float4(0.0f, 0.0f, 0.0f, 0.0f);
 
-                for (float t = 0; t < ray.t_out; ) {
+                int prev_res_lvl = -1;
+                int3 prev_page_dir_offset = int3(-1, -1, -1);
+                float4 page_dir_entry;
 
+#if VISUALIZE_RANDOM_BRICK_REQUESTS_TEX
+                return fixed4(tex2Dlod(_BrickRequestsRandomTex, float4(interpolated.uv, 0, 0)).r, 0.0f, 0.0f, 1.0f);
+#endif
+
+                // start from epsilon to avoid out-of-volume rendering artifacts due to
+                // floating point precision
+                for (float t = epsilon; t < ray.t_out; )
+                {
                     float3 accm_ray = ray.origin + ray.dir * t;
                     int res_lvl = chooseDesiredResolutionLevel(accm_ray);
                     int traversal_depth = chooseTraversalDepth(/* step_size */);
 
+                    // adaptive ray sampling technique
+                    // step_size = adpatSamplingDistance(step_size, res_lvl);
+
                     // empty space skipping through residency octree traversal
                     int node_idx = 0;  // root node
 
-                    for (int i = 0; i <= traversal_depth; ++i) {
-
-                        if (isHomogenous(node_idx)) {
+                    for (int i = 0; i <= traversal_depth; ++i)
+                    {
+                        if (isHomogenous(node_idx))
+                        {
                             // EPSILON is added to avoid infinite loop where exit point lies on one of the node's faces
                             t += skipNode(node_idx, accm_ray, ray.dir) + epsilon;
                             // the density has to be normalized in the same manner OpenGL/Vulkan normalizes an R8_UNORM
@@ -362,26 +418,29 @@ Shader "UnityCTVisualizer/DVR_outofcore"
                         }
 
                         // if this node is not partially mapped => request the corresponding brick & skip the node
-                        if (!isPartiallyMapped(node_idx, res_lvl)) {
+                        if (!isPartiallyMapped(node_idx, res_lvl))
+                        {
                             t += skipNode(node_idx, accm_ray, ray.dir) + epsilon;
                             // try to report brick request so that the node becomes partially mapped
-                            if (nbr_requested_bricks < _MaxNbrBrickRequestsPerRay) {
+                            if (nbr_requested_bricks < _MaxNbrBrickRequestsPerRay)
+                            {
                                 requests[nbr_requested_bricks] = getBrickID(accm_ray, res_lvl);
                                 ++nbr_requested_bricks;
                             }
                             break;
                         }
 
-
-                        if (i < traversal_depth) {
+                        if (i < traversal_depth)
+                        {
                             node_idx = getChildNodeIndex(node_idx, accm_ray);
                             continue;
                         }
                         
                         // at this point maximal traversal depth is reached => node_idx is a leaf node
-                        float3 brick_pos;
+                        float4 brick_pos;
                         float3 brick_offset;
-                        if (tryGetBrick(accm_ray, res_lvl, brick_pos, brick_offset)) {
+                        if (tryGetBrick(accm_ray, res_lvl, brick_pos, brick_offset))
+                        {
                             t += step_size;
                             float sampled_density = tex3Dlod(_BrickCache, float4(brick_pos + brick_offset, 0.0f)).r;
                             // blending
@@ -389,7 +448,8 @@ Shader "UnityCTVisualizer/DVR_outofcore"
                             src.rgb *= src.a;
                             accm_color += (1.0f - accm_color.a) * src;
                         }
-                        else {
+                        else
+                        {
                             t += step_size;
                             // try to report brick request
                             if (nbr_requested_bricks < _MaxNbrBrickRequestsPerRay) {
@@ -407,22 +467,18 @@ Shader "UnityCTVisualizer/DVR_outofcore"
 
                 }  // END ray sampling loop
 
-                if (nbr_requested_bricks > 0) {
+                if (nbr_requested_bricks > 0)
+                {
                     // report all the saved brick requests along the ray - sampled random value belongs to [0.0, 1.0[
                     int r = (int)(tex2Dlod(_BrickRequestsRandomTex, float4(interpolated.uv, 0.0f, 0.0f)).r
                         * _MaxNbrBrickRequests / _MaxNbrBrickRequestsPerRay) * _MaxNbrBrickRequestsPerRay;
-                    for (int k = 0; k < nbr_requested_bricks; ++k) {
-                        brick_requests[r+k] = requests[k];
+
+                    // report all the saved brick requests along the ray - sampled random value belongs to [0.0, 1.0[
+                    for (int k = 0; k < nbr_requested_bricks; ++k)
+                    {
+                        brick_requests[r + k] = requests[k];
                     }
                 }
-
-                /*
-                float4 h = tex3Dlod(_PageTable, float4(interpolated.uv, 0.0f, 0.0f));
-                if (h.r <= 0) {
-                    return fixed4(1.0f, 0.0f, 0.0f, 1.0f);
-                }
-                return fixed4(h.x / _PageTableDims.x, h.y / _PageTableDims.y, h.z / _PageTableDims.z, 1.0f);
-                */
 
                 return accm_color;
             }
