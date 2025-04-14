@@ -63,7 +63,8 @@ namespace UnityCTVisualizer
         private int m_octree_start_depth = 0;
         private readonly int MAX_NBR_BRICK_REQUESTS_PER_RAY = 4;
         private readonly int MAX_NBR_BRICK_REQUESTS_PER_FRAME = 16;
-        private readonly int MAX_NBR_BRICK_UPLOADS_PER_FRAME = 4;
+        private readonly int MAX_IN_FLIGHT_BRICK_IMPORTS = 6;
+        private readonly int MAX_NBR_BRICK_UPLOADS_PER_FRAME = 2;
         public static readonly UInt32 INVALID_BRICK_ID = 0x80000000;
         private readonly UInt16 MAPPED_PAGE_TABLE_ENTRY = 2;
         private readonly UInt16 UNMAPPED_PAGE_TABLE_ENTRY = 1;
@@ -83,7 +84,7 @@ namespace UnityCTVisualizer
         /////////////////////////////////
         private RenderingMode m_rendering_mode;
         private Texture2D m_brick_requests_random_tex = null;
-        private int m_brick_requests_random_tex_size = 64;
+        private int m_brick_requests_random_tex_size = 32;
         private byte[] m_brick_requests_random_tex_data;
         private TextureFormat m_brick_cache_format;
         private int m_tex_plugin_format = (int)TextureSubPlugin.Format.UR8;
@@ -96,9 +97,9 @@ namespace UnityCTVisualizer
         /////////////////////////////////
         private MemoryCache<byte> m_cpu_cache;
 
-        public Material m_DVR_in_core_mat;
-        public Material m_DVR_out_of_core_hybrid_mat;
-        public Material m_DVR_out_of_core_page_table_mat;
+        public Shader IC_SHADER;
+        public Shader OOC_HYBRID_SHADER;
+        public Shader OOC_PT_SHADER;
 
 
         /////////////////////////////////
@@ -246,7 +247,7 @@ namespace UnityCTVisualizer
                     }
 
                     // assign material
-                    m_material = GetComponent<Renderer>().material = m_DVR_in_core_mat;
+                    m_material = GetComponent<Renderer>().material = new Material(IC_SHADER);
 
                     // initialize the brick cache
                     m_brick_cache_size = new Vector3Int(
@@ -290,7 +291,7 @@ namespace UnityCTVisualizer
                     }
 
                     // assign material
-                    m_material = GetComponent<Renderer>().material = m_DVR_out_of_core_hybrid_mat;
+                    m_material = GetComponent<MeshRenderer>().material = new Material(OOC_HYBRID_SHADER);
 
                     m_brick_cache_size = brick_cache_size;
 
@@ -368,7 +369,7 @@ namespace UnityCTVisualizer
                     }
 
                     // assign material
-                    m_material = GetComponent<Renderer>().material = m_DVR_out_of_core_page_table_mat;
+                    m_material = GetComponent<Renderer>().material = new Material(OOC_PT_SHADER);
 
                     m_brick_cache_size = brick_cache_size;
 
@@ -694,7 +695,6 @@ namespace UnityCTVisualizer
             // load the initial page table texture data into the GPU
             m_page_dir.SetPixelData(m_page_dir_data, mipLevel: 0);
             m_page_dir.Apply();
-
         }
 
         private IEnumerator InternalInit()
@@ -736,7 +736,6 @@ namespace UnityCTVisualizer
             m_material.SetTexture(SHADER_BRICK_CACHE_TEX_ID, m_brick_cache);
             m_material.SetFloat(SHADER_SAMPLING_QUALITY_FACTOR_ID, 1.0f);
             // m_material.SetFloat(SHADER_LOD_QUALITY_FACTOR_ID, 2.0f);
-
         }
 
 
@@ -951,6 +950,11 @@ namespace UnityCTVisualizer
         /// </param>
         private void ImportBricksIntoMemoryCache(UInt32[] brick_ids, int nbr_importer_threads = -1)
         {
+            if (m_in_flight_brick_imports.Count > MAX_IN_FLIGHT_BRICK_IMPORTS)
+            {
+                return;
+            }
+
             UInt32[] filtered_brick_ids = new UInt32[MAX_NBR_BRICK_REQUESTS_PER_FRAME];
 
             // first cleanup the brick requests list (remove duplicates, invalid IDs,
@@ -1027,8 +1031,6 @@ namespace UnityCTVisualizer
 
             List<BrickCacheUsage> brick_cache_added_slots = new();
             List<BrickCacheUsage> brick_cache_evicted_slots = new();
-
-            InitializePageDirectory();
 
             while (true)
             {

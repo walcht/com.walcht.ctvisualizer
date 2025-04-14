@@ -48,7 +48,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
             #define INVALID_BRICK_ID 0x80000000
             #define BRICK_CACHE_SLOT_USED 1
 
-            #define MAX_ALLOWED_MAX_NBR_BRICK_REQUESTS_PER_RAY 12
+            #define MAX_ALLOWED_MAX_NBR_BRICK_REQUESTS_PER_RAY 16
             #define MAX_ALLOWED_NBR_RESOLUTION_LVLS 16
 
             #define MAPPED_PAGE_TABLE_ENTRY 2
@@ -99,6 +99,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
             
             int _MaxNbrBrickRequestsPerRay = 4;
             int _MaxNbrBrickRequests = 16;
+
             uniform RWStructuredBuffer<uint> brick_requests : register(u1);
 
             /// <summary>
@@ -118,7 +119,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
             {
                 // distance-based approach - convert back to model space then view space
                 float d = length(UnityObjectToViewPos(p - float3(0.5f, 0.5f, 0.5f)));
-                return min(floor(d / _LODQualityFactor), _MaxResLvl);
+                return 0; // min(floor(d / _LODQualityFactor), _MaxResLvl);
             }
 
             float adpatSamplingDistance(float step_size, int res_lvl)
@@ -137,11 +138,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
                 Box aabb;
                 float3 sides = (_BrickSize << res_lvl) * _VolumeTexelSize;
                 aabb.min = float3(int3(p / sides) * sides);
-                aabb.max = float3(
-                    aabb.min.x + sides.x,
-                    aabb.min.y + sides.y,
-                    aabb.min.z + sides.z
-                );
+                aabb.max = aabb.min + sides;
                 return slabs(p, dir, aabb);
             }
 
@@ -195,7 +192,7 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
                 Ray ray = flipRay(getRayFromBackface(interpolated.modelVertex));
 
                 float step_size =  1.0f / (max(_VolumeDims[0].x, max(_VolumeDims[0].y, _VolumeDims[0].z)) * _SamplingQualityFactor);
-                float epsilon = step_size / 100.0f;
+                float epsilon = step_size / 2.0f;
                 float4 accm_color = float4(0.0f, 0.0f, 0.0f, 0.0f);
 
                 int prev_res_lvl = -1;
@@ -250,26 +247,29 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
 
                     else if (paging_flag == HOMOGENEOUS_PAGE_TABLE_ENTRY)
                     {
+                        /// REMOVE
+                        return fixed4(0.0f, 1.0f, 0.0f, 1.0f);
+
                         // skip the empty page directory entry
-                        float a = skip_page_directory_entry(accm_ray, ray.dir, res_lvl);
+                        float a = max(skip_page_directory_entry(accm_ray, ray.dir, res_lvl) + epsilon, step_size);
+                        t += a;
 
 #if VISUALIZE_PAGE_TABLE_ENTRY_SPACE_SKIPPING 
-                        if (a > 0) {
-                            return fixed4(0.0f, 1.0f, 0.0f, 1.0f);
-                        } else {
-                            return fixed4(1.0f, 0.0f, 0.0f, 1.0f);
-                        }
+                        return fixed4(a, a, a, a) * 100;
 #endif
 
-                        t += a + epsilon;
                         sampled_density = page_dir_entry.x / 255.0f;
                     }
 
                     else
                     {
-                        // skip the empty page directory entry
-                        float a = skip_page_directory_entry(accm_ray, ray.dir, res_lvl);
-                        t += a + epsilon;
+                        // skip the unmapped page directory entry - we don't want to add very small deltas
+                        float a = max(skip_page_directory_entry(accm_ray, ray.dir, res_lvl) + epsilon, step_size);
+                        t += a;
+
+#if VISUALIZE_PAGE_TABLE_ENTRY_SPACE_SKIPPING 
+                        return fixed4(a, a, a, a) * 100;
+#endif
 
                         if (nbr_requested_bricks < _MaxNbrBrickRequestsPerRay) {
                            requests[nbr_requested_bricks] = getBrickID(accm_ray, res_lvl);
@@ -300,7 +300,8 @@ Shader "UnityCTVisualizer/DVR_outofcore_page_table_only"
                         * _MaxNbrBrickRequests / _MaxNbrBrickRequestsPerRay) * _MaxNbrBrickRequestsPerRay;
 
                     // report all the saved brick requests along the ray - sampled random value belongs to [0.0, 1.0[
-                    for (int k = 0; k < nbr_requested_bricks; ++k) {
+                    for (int k = 0; k < nbr_requested_bricks; ++k)
+                    {
                         brick_requests[r + k] = requests[k];
                     }
                 }
