@@ -583,6 +583,7 @@ MonoBehaviour:
   m_TFDropDown: {fileID: 4186948109815567916}
   m_AlphaCutoffSlider: {fileID: 3273383444374124860}
   m_SamplingQualityFactorSlider: {fileID: 5305857380868024456}
+  m_LODQualityFactorSlider: {fileID: 5305857380868024456}
   m_InterpolationDropDown: {fileID: 1219736189416791556}
 --- !u!1 &992416080141168020
 GameObject:

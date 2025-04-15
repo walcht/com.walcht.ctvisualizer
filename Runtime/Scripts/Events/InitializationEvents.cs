@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace UnityCTVisualizer {
     public static class InitializationEvents {
@@ -13,6 +14,8 @@ namespace UnityCTVisualizer {
         ///     instance is passed to the handler(s).
         /// </summary>
         public static Action<VolumetricDataset> OnVolumetricDatasetCreation;
+
+        public static Action<List<UInt64>> OnHistogramImport;
     }
 }
 

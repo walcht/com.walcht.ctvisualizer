@@ -98,6 +98,8 @@ namespace UnityCTVisualizer
             // make the volumetric model dispatch its default visualization params state so that
             // listeners get the default visualization parameters
             volumetric_dataset.DispatchVisualizationParamsChangeEvents();
+
+            InitializationEvents.OnHistogramImport?.Invoke(Importer.ImportHistogram(volumetric_dataset.Metadata));
         }
 
 

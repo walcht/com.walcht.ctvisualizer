@@ -200,7 +200,7 @@ namespace UnityCTVisualizer
 
         public string output_dir;
         private IState m_curr_state = null;
-        private OutOfCoreBenchmarks m_ooc_benchmarks;
+        private OutOfCoreBenchmarks m_ooc_benchmarks = new();
 
 
         void Start()

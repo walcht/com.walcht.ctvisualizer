@@ -243,8 +243,8 @@ Shader "UnityCTVisualizer/ooc_dvr_hybrid_shader"
             int chooseDesiredResolutionLevel(float3 p)
             {
                 // distance-based approach - convert back to model space then view space
-                // float d = length(UnityObjectToViewPos(p - float3(0.5f, 0.5f, 0.5f)));
-                return 0;// min(floor(d / _LODQualityFactor), _MaxResLvl);
+                float d = length(UnityObjectToViewPos(p - float3(0.5f, 0.5f, 0.5f)));
+                return min(floor(d / _LODQualityFactor), _MaxResLvl);
             }
 
             
@@ -493,7 +493,6 @@ Shader "UnityCTVisualizer/ooc_dvr_hybrid_shader"
                             float4 src = tex2Dlod(_TFColors, float4(sampled_density, 0.0f, 0.0f, 0.0f));
                             src.rgb *= src.a;
                             accm_color += (1.0f - accm_color.a) * src;
-
                         }
                         else 
                         {

@@ -51,7 +51,7 @@ Shader "UnityCTVisualizer/HistogramShader"
             fixed4 frag (v2f i) : SV_Target
             {
                 // sample the frequency for current density
-                float freq = tex2Dlod(_MainTex, float4(i.uv.x, 0.0f, 0.0f, 0.0f));
+                float freq = tex2Dlod(_MainTex, float4(i.uv.x, 0.0f, 0.0f, 0.0f)).r;
                 float t = step(freq, i.uv.y);
                 float4 col = t * _BackgroundColor + (1 - t) * _BinColor;
                 for (int j = 0; j < _AlphaCount - 1; ++j) {

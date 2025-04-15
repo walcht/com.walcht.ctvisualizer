@@ -559,7 +559,6 @@ namespace UnityCTVisualizer
 
         }
 
-
         private void InitializeBrickRequestsRandomTex()
         {
             m_brick_requests_random_tex = new Texture2D(m_brick_requests_random_tex_size, m_brick_requests_random_tex_size,

@@ -454,5 +454,19 @@ namespace UnityCTVisualizer
             return data;
         }
 
+        public static List<UInt64> ImportHistogram(CVDSMetadata metadata)
+        {
+            string fp = Path.Join(metadata.RootFilepath, "histogram.bin");
+            byte[] source_data = File.ReadAllBytes(fp);
+            List<UInt64> data = new();
+            for (int i = 0; i < source_data.Length; i += 8)
+            {
+                UInt64 val = BitConverter.ToUInt64(source_data, i);
+                data.Add(val);
+            }
+            return data;
+        }
+
+
     }
 }
