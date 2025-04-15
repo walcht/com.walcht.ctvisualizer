@@ -59,10 +59,11 @@ namespace UnityCTVisualizer
 
         private int m_max_octree_depth;
         private int m_octree_start_depth = 0;
-        private readonly int MAX_NBR_BRICK_REQUESTS_PER_RAY = 1;
-        private readonly int MAX_NBR_BRICK_REQUESTS_PER_FRAME = 32;
-        private readonly int MAX_IN_FLIGHT_BRICK_IMPORTS = 6;
-        private readonly int MAX_NBR_BRICK_UPLOADS_PER_FRAME = 8;
+        public readonly int MAX_NBR_BRICK_REQUESTS_PER_RAY = 1;
+        public readonly int MAX_NBR_BRICK_REQUESTS_PER_FRAME = 32;
+        public readonly int MAX_IN_FLIGHT_BRICK_IMPORTS = 6;
+        public readonly int MAX_NBR_BRICK_UPLOADS_PER_FRAME = 8;
+
         public static readonly UInt32 INVALID_BRICK_ID = 0x80000000;
         private readonly UInt16 MAPPED_PAGE_TABLE_ENTRY = 2;
         private readonly UInt16 UNMAPPED_PAGE_TABLE_ENTRY = 1;

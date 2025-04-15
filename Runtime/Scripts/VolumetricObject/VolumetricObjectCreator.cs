@@ -1,8 +1,5 @@
 using UnityEngine;
 using System;
-#if (UNITY_ANDROID && !UNITY_EDITOR)
-using UnityEngine.Android;
-#endif
 
 namespace UnityCTVisualizer
 {
@@ -16,18 +13,6 @@ namespace UnityCTVisualizer
         [SerializeField] GameObject m_VolumetricObjectPrefab;
         [SerializeField] Vector3 m_VolumetricObjectPosition;
         private VolumetricObject m_VolumetricObject;
-
-#if (UNITY_ANDROID && !UNITY_EDITOR)
-        private void Awake()
-        {
-          var callbacks = new PermissionCallbacks();
-          callbacks.PermissionDenied += PermissionCallbacks_PermissionDenied;
-          callbacks.PermissionGranted += PermissionCallbacks_PermissionGranted;
-          // request permissions
-          if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
-              Permission.RequestUserPermission(Permission.ExternalStorageRead);
-        }
-#endif
 
         void OnEnable()
         {
@@ -63,16 +48,6 @@ namespace UnityCTVisualizer
 
             if (args.Item2.benchmark)
             {
-                // request write permission on Android
-#if (UNITY_ANDROID && !UNITY_EDITOR)
-                var callbacks = new PermissionCallbacks();
-                callbacks.PermissionDenied += PermissionCallbacks_PermissionDenied;
-                callbacks.PermissionGranted += PermissionCallbacks_PermissionGranted;
-                // request permissions
-                if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageWrite))
-                    Permission.RequestUserPermission(Permission.ExternalStorageWrite);
-#endif
-
                 switch (args.Item2.rendering_mode)
                 {
                     case RenderingMode.OOC_PT:
@@ -102,17 +77,5 @@ namespace UnityCTVisualizer
             InitializationEvents.OnHistogramImport?.Invoke(Importer.ImportHistogram(volumetric_dataset.Metadata));
         }
 
-
-#if (UNITY_ANDROID && !UNITY_EDITOR)
-        internal void PermissionCallbacks_PermissionGranted(string permissionName)
-        {
-            Debug.Log("permission to read from the file system was granted");
-        }
-
-        internal void PermissionCallbacks_PermissionDenied(string permissionName)
-        {
-            throw new Exception($"permission to read from the file system was NOT granted. Aborting ...");
-        }
-#endif
     }
 }
