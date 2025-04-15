@@ -1043,7 +1043,6 @@ namespace UnityCTVisualizer
         /// </summary>
         public IEnumerator OOCPageTableOnlyLoop()
         {
-
             // make sure to only start when all dependencies are initialized
             yield return new WaitUntil(() => (m_volume_dataset != null) && (m_transfer_function != null)
                 && (m_brick_cache != null));
@@ -1062,7 +1061,6 @@ namespace UnityCTVisualizer
 
             while (true)
             {
-
                 // wait until current frame rendering is done ...
                 yield return new WaitForEndOfFrame();
 
@@ -1197,13 +1195,12 @@ namespace UnityCTVisualizer
         /// </summary>
         public IEnumerator OOCHybridLoop()
         {
-
             // make sure to only start when all dependencies are initialized
-            yield return new WaitUntil(() => (m_volume_dataset != null) && (m_transfer_function != null) && (m_brick_cache != null));
+            yield return new WaitUntil(() => (m_volume_dataset != null) && (m_transfer_function != null)
+                && (m_brick_cache != null));
 
             Debug.Log("started handling GPU brick requests");
 
-            CVDSMetadata metadata = m_volume_dataset.Metadata;
             long nbr_bricks_uploaded = 0;
             int nbr_bricks_uploaded_per_frame = 0;
             CommandBuffer cmd_buffer = new();
@@ -1220,6 +1217,8 @@ namespace UnityCTVisualizer
                 // wait until current frame rendering is done ...
                 yield return new WaitForEndOfFrame();
 
+                bool page_directory_dity = false;
+
                 // we can safely assume that bricks uploaded to GPU in previous frame are done
                 nbr_bricks_uploaded += nbr_bricks_uploaded_per_frame;
 
@@ -1232,11 +1231,15 @@ namespace UnityCTVisualizer
                 // get bricks requested by GPU in this frame and import them into bricks memory cache
                 GPUGetBrickRequests(brick_requests);
                 GPUResetBrickRequestsBuffer();
-                ImportBricksIntoMemoryCache(brick_requests);
+                ImportBricksIntoMemoryCache(brick_requests, m_nbr_brick_importer_threads);
 
                 // update CPU brick cache usage and reset it on the GPU
                 CPUUpdateBrickCacheUsageBuffer();
                 GPUResetBrickCacheUsageBuffer();
+
+                GPURandomizeBrickRequestsTexOffset();
+                GPUUpdateVisualizationParams();
+
 
                 // upload requested bricks to the GPU from the bricks reply queue
                 while (
@@ -1245,10 +1248,32 @@ namespace UnityCTVisualizer
                 )
                 {
 
+                    // we are sending a managed object to unmanaged thread (i.e., C++) the object has to be pinned
+                    // to a fixed location in memory during the plugin call
+                    var brick = m_cpu_cache.Get(brick_id);
+                    Assert.IsNotNull(brick);
+
+                    // in case the brick is homogeneous, avoid adding it the cache and just update the
+                    // corresponding page entry
+                    if (brick.min == brick.max)
+                    {
+                        page_directory_dity = true;
+                        UpdatePageTablesHomogeneousBrick(brick_id, brick.min);
+                        Debug.Log($"brick {brick_id} is homogeneous with val: {brick.min}");
+                        continue;
+                    }
+
+                    handles[nbr_bricks_uploaded_per_frame] = GCHandle.Alloc(brick.data, GCHandleType.Pinned);
+
                     // LRU cache eviction scheme; pick least recently used brick cache slot
                     int brick_cache_idx = m_brick_cache_usage_sorted[nbr_bricks_uploaded_per_frame].brick_cache_idx;
                     BrickCacheUsage evicted_slot = m_brick_cache_usage[brick_cache_idx];
-                    BrickCacheUsage added_slot = new() { brick_id = brick_id, timestamp = m_timestamp };
+                    BrickCacheUsage added_slot = new()
+                    {
+                        brick_id = brick_id,
+                        timestamp = m_timestamp,
+                        brick_cache_idx = brick_cache_idx
+                    };
                     // check if evicted brick slot is already empty
                     if (!IsBrickCacheSlotEmpty(evicted_slot))
                     {
@@ -1257,12 +1282,6 @@ namespace UnityCTVisualizer
                     brick_cache_added_slots.Add(added_slot);
                     m_brick_cache_usage[brick_cache_idx] = added_slot;
                     GetBrickCacheSlotPosition(brick_cache_idx, out Vector3Int brick_cache_slot_pos);
-
-                    // we are sending a managed object to unmanaged thread (i.e., C++) the object has to be pinned to a
-                    // fixed location in memory during the plugin call
-                    var brick = m_cpu_cache.Get(brick_id);
-                    Assert.IsNotNull(brick);
-                    handles[nbr_bricks_uploaded_per_frame] = GCHandle.Alloc(brick.data, GCHandleType.Pinned);
 
                     // allocate the plugin call's arguments struct
                     TextureSubImage3DParams args = new()
@@ -1293,7 +1312,8 @@ namespace UnityCTVisualizer
                 Graphics.ExecuteCommandBuffer(cmd_buffer);
                 cmd_buffer.Clear();
 
-                if ((brick_cache_added_slots.Count > 0) || (brick_cache_evicted_slots.Count > 0))
+                if (page_directory_dity || (brick_cache_added_slots.Count > 0)
+                    || (brick_cache_evicted_slots.Count > 0))
                 {
                     // make sure to update the brick cache bricks residency HashSet before updating the residency octree!
                     UpdateBrickCacheResidencyHashSet(brick_cache_added_slots, brick_cache_evicted_slots);
@@ -1311,10 +1331,10 @@ namespace UnityCTVisualizer
                             Destroy(transform.Find($"brick_{evicted_slot.brick_id & 0x03FFFFFF}_res_lvl_{evicted_slot.brick_id >> 26}").gameObject);
                         }
                     }
-                }
 
-                brick_cache_added_slots.Clear();
-                brick_cache_evicted_slots.Clear();
+                    brick_cache_added_slots.Clear();
+                    brick_cache_evicted_slots.Clear();
+                }
 
                 // increase timestamp
                 ++m_timestamp;
