@@ -59,7 +59,7 @@ namespace UnityCTVisualizer
 
         private int m_max_octree_depth;
         private int m_octree_start_depth = 0;
-        private readonly int MAX_NBR_BRICK_REQUESTS_PER_RAY = 2;
+        private readonly int MAX_NBR_BRICK_REQUESTS_PER_RAY = 1;
         private readonly int MAX_NBR_BRICK_REQUESTS_PER_FRAME = 32;
         private readonly int MAX_IN_FLIGHT_BRICK_IMPORTS = 6;
         private readonly int MAX_NBR_BRICK_UPLOADS_PER_FRAME = 8;
@@ -82,7 +82,7 @@ namespace UnityCTVisualizer
         /////////////////////////////////
         private RenderingMode m_rendering_mode;
         private Texture2D m_brick_requests_random_tex = null;
-        private int m_brick_requests_random_tex_size = 32;
+        private int m_brick_requests_random_tex_size = 64;
         private byte[] m_brick_requests_random_tex_data;
         private TextureFormat m_brick_cache_format;
         private int m_tex_plugin_format = (int)TextureSubPlugin.Format.UR8;
@@ -95,9 +95,9 @@ namespace UnityCTVisualizer
         /////////////////////////////////
         private MemoryCache<byte> m_cpu_cache;
 
-        public Shader IC_SHADER;
-        public Shader OOC_HYBRID_SHADER;
-        public Shader OOC_PT_SHADER;
+        public Material IC_MAT;
+        public Material OOC_HYBRID_MAT;
+        public Material OOC_PT_MAT;
 
 
         /////////////////////////////////
@@ -207,6 +207,8 @@ namespace UnityCTVisualizer
         // EVENTS
         /////////////////////////////////
         public static event Action OnNoMoreBrickRequests;
+        public static event Action<float, long> OnInCoreAllBricksLoadedToCPUCache;
+        public static event Action<float, long> OnInCoreAllBricksLoadedToGPUCache;
 
 
         private void Awake()
@@ -245,7 +247,7 @@ namespace UnityCTVisualizer
                     }
 
                     // assign material
-                    m_material = GetComponent<Renderer>().material = new Material(IC_SHADER);
+                    m_material = GetComponent<Renderer>().material = IC_MAT;
 
                     // initialize the brick cache
                     m_brick_cache_size = new Vector3Int(
@@ -261,8 +263,19 @@ namespace UnityCTVisualizer
                     ProgressHandlerEvents.OnRequestActivate?.Invoke(true);
                     Task t = Task.Run(() =>
                     {
+                        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
                         Importer.LoadAllBricksIntoCache(m_volume_dataset.Metadata, m_brick_size, m_resolution_lvl,
                             m_cpu_cache, m_brick_reply_queue, m_nbr_brick_importer_threads);
+
+                        stopwatch.Stop();
+                        float elapsed = stopwatch.ElapsedMilliseconds;
+                        Debug.Log($"uploading to host memory cache took: {elapsed / 1000.0f}s");
+                        long total_nbr_bricks = m_metadata.NbrChunksPerResolutionLvl[resolution_lvl].x *
+                            m_metadata.NbrChunksPerResolutionLvl[resolution_lvl].y *
+                            m_metadata.NbrChunksPerResolutionLvl[resolution_lvl].z *
+                            (int)Math.Pow(m_metadata.ChunkSize / brick_size, 3);
+                        OnInCoreAllBricksLoadedToCPUCache?.Invoke(elapsed, total_nbr_bricks);
                     });
                     t.ContinueWith(t => { Debug.LogException(t.Exception); }, TaskContinuationOptions.OnlyOnFaulted);
 
@@ -288,19 +301,19 @@ namespace UnityCTVisualizer
 
                     // check parameter constraints
                     if ((brick_cache_size.x <= 0) || (brick_cache_size.y <= 0) || (brick_cache_size.z <= 0)
-                        || !Mathf.IsPowerOfTwo(brick_cache_size.x) || !Mathf.IsPowerOfTwo(brick_cache_size.y)
-                        || !Mathf.IsPowerOfTwo(brick_cache_size.z) || ((brick_cache_size.x % m_brick_size) != 0)
-                        || ((brick_cache_size.y % m_brick_size) != 0) || ((brick_cache_size.z % m_brick_size) != 0))
+                        || ((brick_cache_size.x % m_brick_size) != 0) || ((brick_cache_size.y % m_brick_size) != 0)
+                        || ((brick_cache_size.z % m_brick_size) != 0))
                     {
                         throw new Exception($"invalid provided brick cache dimension size for out-of-core rendering: {brick_cache_size}");
                     }
+
                     if ((MAX_NBR_BRICK_REQUESTS_PER_FRAME % MAX_NBR_BRICK_REQUESTS_PER_RAY) != 0)
                     {
                         throw new Exception("MAX_NBR_BRICK_REQUESTS_PER_FRAME has to be a multiple of MAX_NBR_BRICK_REQUESTS_PER_RAY");
                     }
 
                     // assign material
-                    m_material = GetComponent<MeshRenderer>().material = new Material(OOC_HYBRID_SHADER);
+                    m_material = GetComponent<MeshRenderer>().material = OOC_HYBRID_MAT;
 
                     m_brick_cache_size = brick_cache_size;
 
@@ -327,25 +340,9 @@ namespace UnityCTVisualizer
                     // initialize the page table(s)
                     InitializePageDirectory();
 
-                    // initialize remaining shader variables/properties
+                    SetOOCShaderProperties();
 
-                    // set remaining shader variables
-                    m_material.SetInteger(SHADER_OCTREE_START_DEPTH_ID, m_octree_start_depth);
-                    m_material.SetInteger(SHADER_MAX_OCTREE_DEPTH_ID, m_max_octree_depth);
-                    m_material.SetInteger(SHADER_MAX_NBR_BRICK_REQUESTS_PER_RAY_ID, MAX_NBR_BRICK_REQUESTS_PER_RAY);
-                    m_material.SetInteger(SHADER_MAX_NBR_BRICK_REQUESTS_ID, MAX_NBR_BRICK_REQUESTS_PER_FRAME);
-                    m_material.SetInteger(SHADER_BRICK_SIZE_ID, m_brick_size);
-                    m_material.SetVector(SHADER_VOLUME_DIMS_ID, new Vector3(m_metadata.Dims.x, m_metadata.Dims.y, m_metadata.Dims.z));
-                    m_material.SetVector(SHADER_BRICK_CACHE_DIMS_ID, new Vector3(m_brick_cache_size.x, m_brick_cache_size.y, m_brick_cache_size.z));
-                    m_material.SetVector(SHADER_BRICK_CACHE_NBR_BRICKS, new Vector3(m_brick_cache_nbr_bricks.x, m_brick_cache_nbr_bricks.y, m_brick_cache_nbr_bricks.z));
-                    m_material.SetInteger(SHADER_MAX_RES_LVL_ID, m_metadata.NbrResolutionLvls - 1);
-
-                    // scale mesh to match correct dimensions of the original volumetric data
-                    m_transform.localScale = new Vector3(
-                         MM_TO_METERS * m_metadata.VoxelDims.x * Mathf.Ceil(m_metadata.Dims.x / (1 << m_resolution_lvl)),
-                         MM_TO_METERS * m_metadata.VoxelDims.y * Mathf.Ceil(m_metadata.Dims.y / (1 << m_resolution_lvl)),
-                         MM_TO_METERS * m_metadata.VoxelDims.z * Mathf.Ceil(m_metadata.Dims.z / (1 << m_resolution_lvl))
-                    );
+                    ScaleOOCMesh();
 
                     // finally start the loop
                     StartCoroutine(OOCHybridLoop());
@@ -370,7 +367,7 @@ namespace UnityCTVisualizer
                     }
 
                     // assign material
-                    m_material = GetComponent<Renderer>().material = new Material(OOC_PT_SHADER);
+                    m_material = GetComponent<Renderer>().material = OOC_PT_MAT;
 
                     m_brick_cache_size = brick_cache_size;
 
@@ -392,53 +389,9 @@ namespace UnityCTVisualizer
                     // initialize the page table(s)
                     InitializePageDirectory();
 
-                    // create an array to hold nbr bricks per resolution level
-                    m_nbr_bricks_per_res_lvl = new Vector4[m_metadata.NbrResolutionLvls];
-                    for (int i = 0; i < m_nbr_bricks_per_res_lvl.Length; ++i)
-                    {
-                        int r = m_metadata.ChunkSize / m_brick_size;
-                        m_nbr_bricks_per_res_lvl[i] = new Vector4(m_metadata.NbrChunksPerResolutionLvl[i].x,
-                            m_metadata.NbrChunksPerResolutionLvl[i].y,
-                            m_metadata.NbrChunksPerResolutionLvl[i].z) * r;
-                    }
-                    m_material.SetVectorArray(SHADER_NBR_BRICKS_PER_RES_LVL_ID, m_nbr_bricks_per_res_lvl);
+                    SetOOCShaderProperties();
 
-                    Vector4[] volume_dims = new Vector4[m_metadata.NbrResolutionLvls];
-                    for (int i = 0; i < volume_dims.Length; ++i)
-                    {
-                        volume_dims[i] = new Vector4(Mathf.Ceil(m_metadata.Dims.x / (float)(1 << i)),
-                            Mathf.Ceil(m_metadata.Dims.y / (float)(1 << i)),
-                            Mathf.Ceil(m_metadata.Dims.z / (float)(1 << i)));
-                    }
-                    m_material.SetVectorArray(SHADER_VOLUME_DIMS_ID, volume_dims);
-
-                    Vector3 volume_texel_size = new(1.0f / m_metadata.Dims.x,
-                        1.0f / m_metadata.Dims.y, 1.0f / m_metadata.Dims.z);
-                    m_material.SetVector(SHADER_VOLUME_TEXEL_SIZE_ID, volume_texel_size);
-
-                    // set remaining shader variables
-                    m_material.SetInteger(SHADER_MAX_NBR_BRICK_REQUESTS_PER_RAY_ID, MAX_NBR_BRICK_REQUESTS_PER_RAY);
-                    m_material.SetInteger(SHADER_MAX_NBR_BRICK_REQUESTS_ID, MAX_NBR_BRICK_REQUESTS_PER_FRAME);
-                    m_material.SetInteger(SHADER_BRICK_SIZE_ID, m_brick_size);
-                    m_material.SetInteger(SHADER_MAX_RES_LVL_ID, m_metadata.NbrResolutionLvls - 1);
-
-                    Vector4 brick_cache_voxel_size = new(1.0f / m_brick_cache_size.x,
-                        1.0f / m_brick_cache_size.y, 1.0f / m_brick_cache_size.z);
-                    m_material.SetVector(SHADER_BRICK_CACHE_VOXEL_SIZE, brick_cache_voxel_size);
-
-                    m_material.SetVector(SHADER_BRICK_CACHE_DIMS_ID, new Vector3(m_brick_cache_size.x,
-                        m_brick_cache_size.y, m_brick_cache_size.z));
-
-                    Vector3 brick_cache_nbr_bricks = new(m_brick_cache_nbr_bricks.x,
-                        m_brick_cache_nbr_bricks.y, m_brick_cache_nbr_bricks.z);
-                    m_material.SetVector(SHADER_BRICK_CACHE_NBR_BRICKS, brick_cache_nbr_bricks);
-
-                    // scale mesh to match correct dimensions of the original volumetric data
-                    m_transform.localScale = new Vector3(
-                         MM_TO_METERS * m_metadata.VoxelDims.x * Mathf.Ceil(m_metadata.Dims.x / (1 << m_resolution_lvl)),
-                         MM_TO_METERS * m_metadata.VoxelDims.y * Mathf.Ceil(m_metadata.Dims.y / (1 << m_resolution_lvl)),
-                         MM_TO_METERS * m_metadata.VoxelDims.z * Mathf.Ceil(m_metadata.Dims.z / (1 << m_resolution_lvl))
-                    );
+                    ScaleOOCMesh();
 
                     // finally start the loop
                     StartCoroutine(OOCPageTableOnlyLoop());
@@ -595,6 +548,9 @@ namespace UnityCTVisualizer
                 Marshal.SizeOf<ResidencyNode>(), ComputeBufferType.Structured, ComputeBufferMode.Dynamic);
 
             m_material.SetBuffer(SHADER_RESIDENCY_OCTREE_BUFFER_ID, m_residency_octree_cb);
+            m_material.SetInteger(SHADER_OCTREE_START_DEPTH_ID, m_octree_start_depth);
+            m_material.SetInteger(SHADER_MAX_OCTREE_DEPTH_ID, m_max_octree_depth);
+
             GPUUpdateResidencyOctree(new List<BrickCacheUsage>(), new List<BrickCacheUsage>());
 
             Debug.Log($"residency octree node struct size: {Marshal.SizeOf<ResidencyNode>()} bytes");
@@ -694,6 +650,60 @@ namespace UnityCTVisualizer
             // load the initial page table texture data into the GPU
             m_page_dir.SetPixelData(m_page_dir_data, mipLevel: 0);
             m_page_dir.Apply();
+        }
+
+        private void SetOOCShaderProperties()
+        {
+            // create an array to hold nbr bricks per resolution level
+            m_nbr_bricks_per_res_lvl = new Vector4[m_metadata.NbrResolutionLvls];
+            for (int i = 0; i < m_nbr_bricks_per_res_lvl.Length; ++i)
+            {
+                int r = m_metadata.ChunkSize / m_brick_size;
+                m_nbr_bricks_per_res_lvl[i] = new Vector4(m_metadata.NbrChunksPerResolutionLvl[i].x,
+                    m_metadata.NbrChunksPerResolutionLvl[i].y,
+                    m_metadata.NbrChunksPerResolutionLvl[i].z) * r;
+            }
+            m_material.SetVectorArray(SHADER_NBR_BRICKS_PER_RES_LVL_ID, m_nbr_bricks_per_res_lvl);
+
+            Vector4[] volume_dims = new Vector4[m_metadata.NbrResolutionLvls];
+            for (int i = 0; i < volume_dims.Length; ++i)
+            {
+                volume_dims[i] = new Vector4(Mathf.Ceil(m_metadata.Dims.x / (float)(1 << i)),
+                    Mathf.Ceil(m_metadata.Dims.y / (float)(1 << i)),
+                    Mathf.Ceil(m_metadata.Dims.z / (float)(1 << i)));
+            }
+            m_material.SetVectorArray(SHADER_VOLUME_DIMS_ID, volume_dims);
+
+            Vector3 volume_texel_size = new(1.0f / m_metadata.Dims.x,
+                        1.0f / m_metadata.Dims.y, 1.0f / m_metadata.Dims.z);
+            m_material.SetVector(SHADER_VOLUME_TEXEL_SIZE_ID, volume_texel_size);
+
+            // set remaining shader variables
+            m_material.SetInteger(SHADER_MAX_NBR_BRICK_REQUESTS_PER_RAY_ID, MAX_NBR_BRICK_REQUESTS_PER_RAY);
+            m_material.SetInteger(SHADER_MAX_NBR_BRICK_REQUESTS_ID, MAX_NBR_BRICK_REQUESTS_PER_FRAME);
+            m_material.SetInteger(SHADER_BRICK_SIZE_ID, m_brick_size);
+            m_material.SetInteger(SHADER_MAX_RES_LVL_ID, m_metadata.NbrResolutionLvls - 1);
+
+            Vector4 brick_cache_voxel_size = new(1.0f / m_brick_cache_size.x,
+                        1.0f / m_brick_cache_size.y, 1.0f / m_brick_cache_size.z);
+            m_material.SetVector(SHADER_BRICK_CACHE_VOXEL_SIZE, brick_cache_voxel_size);
+
+            m_material.SetVector(SHADER_BRICK_CACHE_DIMS_ID, new Vector3(m_brick_cache_size.x,
+                m_brick_cache_size.y, m_brick_cache_size.z));
+
+            Vector3 brick_cache_nbr_bricks = new(m_brick_cache_nbr_bricks.x,
+                        m_brick_cache_nbr_bricks.y, m_brick_cache_nbr_bricks.z);
+            m_material.SetVector(SHADER_BRICK_CACHE_NBR_BRICKS, brick_cache_nbr_bricks);
+        }
+
+        private void ScaleOOCMesh()
+        {
+            // scale mesh to match correct dimensions of the original volumetric data
+            m_transform.localScale = new Vector3(
+                 MM_TO_METERS * m_metadata.VoxelDims.x * m_metadata.Dims.x,
+                 MM_TO_METERS * m_metadata.VoxelDims.y * m_metadata.Dims.y,
+                 MM_TO_METERS * m_metadata.VoxelDims.z * m_metadata.Dims.z
+            );
         }
 
         private IEnumerator InternalInit()
@@ -930,7 +940,9 @@ namespace UnityCTVisualizer
 
             }  // END WHILE
 
-            Debug.Log($"uploading all {total_nbr_bricks} bricks to GPU took: {stopwatch.Elapsed}s");
+            float elapsed = stopwatch.ElapsedMilliseconds;
+            Debug.Log($"uploading all {total_nbr_bricks} bricks to GPU took: {elapsed / 1000.0f}s");
+            OnInCoreAllBricksLoadedToGPUCache?.Invoke(elapsed, total_nbr_bricks);
 
             while (true)
             {

@@ -11,6 +11,7 @@ namespace UnityCTVisualizer
         public Vector3Int brick_cache_size;
         public RenderingMode rendering_mode;
         public int CPUBrickCacheSizeMB;
+        public bool benchmark;
     }
 
     public static class VisualizationParametersEvents

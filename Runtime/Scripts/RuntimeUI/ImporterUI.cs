@@ -1,15 +1,13 @@
 using System;
-using System.IO;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-#if (UNITY_ANDROID && !UNITY_EDITOR)
-using UnityEngine.Android;
-#endif
 
-namespace UnityCTVisualizer {
-    public class ImporterUI : MonoBehaviour {
+namespace UnityCTVisualizer
+{
+    public class ImporterUI : MonoBehaviour
+    {
 
         [SerializeField] Button m_ImportBtn;
         [SerializeField] TMP_InputField m_FilepathInputField;
@@ -21,13 +19,15 @@ namespace UnityCTVisualizer {
         [SerializeField] TMP_Dropdown m_BrickCacheSizeYDropDown;
         [SerializeField] TMP_Dropdown m_BrickCacheSizeZDropDown;
         [SerializeField] TMP_Dropdown m_CPUBrickCacheSizeDropDown;
+        [SerializeField] Toggle m_BenchmarkToggle;
 
         [SerializeField] ProgressHandler m_ProgressHandler;
 
         CVDSMetadata m_CurrentMetadata;
         Color m_DefaultTextColor;
 
-        void OnEnable() {
+        void OnEnable()
+        {
             // make sure that initially the progress handler is disabled
             m_ProgressHandler.gameObject.SetActive(false);
             // disable import button
@@ -37,43 +37,25 @@ namespace UnityCTVisualizer {
             m_BrickSizeDropDown.onValueChanged.AddListener(OnBrickSizeChange);
         }
 
-        void OnDisable() {
+        void OnDisable()
+        {
             m_FilepathInputField.onSubmit.RemoveListener(OnFilepathSubmit);
             m_ImportBtn.onClick.RemoveListener(OnImportClick);
             m_BrickSizeDropDown.onValueChanged.RemoveAllListeners();
         }
 
-#if (UNITY_ANDROID && !UNITY_EDITOR)
-        internal void PermissionCallbacks_PermissionGranted(string permissionName)
+        void Awake()
         {
-            Debug.Log("permission to read from the file system was granted");
-        }
-
-        internal void PermissionCallbacks_PermissionDenied(string permissionName)
-        {
-            throw new Exception($"permission to read from the file system was NOT granted. Aborting ...");
-        }
-#endif
-
-        void Awake() {
             m_DefaultTextColor = m_FilepathInputField.textComponent.color;
-#if (UNITY_ANDROID && !UNITY_EDITOR)
-          var callbacks = new PermissionCallbacks();
-          callbacks.PermissionDenied += PermissionCallbacks_PermissionDenied;
-          callbacks.PermissionGranted += PermissionCallbacks_PermissionGranted;
-          // request permissions
-          if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
-              Permission.RequestUserPermission(Permission.ExternalStorageRead);
-#endif
         }
 
         /////////////////////////////////
         /// UI CALLBACKS (VIEW INVOKES)
         /////////////////////////////////
-        void OnFilepathSubmit(string fp) {
-
-            try {
-
+        void OnFilepathSubmit(string fp)
+        {
+            try
+            {
                 m_CurrentMetadata = Importer.ImportMetadata(fp);
 
                 // fill the allowed number of importer threads options
@@ -110,6 +92,9 @@ namespace UnityCTVisualizer {
                     cpuBrickCacheSizeOptions.Add(new((i * 512).ToString()));
                 m_CPUBrickCacheSizeDropDown.options = cpuBrickCacheSizeOptions;
 
+                // by default benchmarking is on
+                m_BenchmarkToggle.isOn = true;
+
                 m_ImportBtn.interactable = true;
                 m_NbrImporterThreadsDropDown.interactable = true;
                 m_BrickSizeDropDown.interactable = true;
@@ -119,41 +104,51 @@ namespace UnityCTVisualizer {
                 m_BrickCacheSizeYDropDown.interactable = true;
                 m_BrickCacheSizeZDropDown.interactable = true;
                 m_CPUBrickCacheSizeDropDown.interactable = true;
+                m_BenchmarkToggle.interactable = true;
 
                 m_FilepathInputField.textComponent.color = m_DefaultTextColor;
 
                 Debug.Log($"successfully imported CVDS metadta from: {fp}");
-
-            } catch (Exception) {
-
+            }
+            catch (Exception)
+            {
                 m_CurrentMetadata = null;
+
                 m_ImportBtn.interactable = false;
                 m_NbrImporterThreadsDropDown.interactable = false;
                 m_BrickSizeDropDown.interactable = false;
                 m_HighestResLvlDropDown.interactable = false;
+                m_RenderingModeDropDown.interactable = false;
+                m_BrickCacheSizeXDropDown.interactable = false;
+                m_BrickCacheSizeYDropDown.interactable = false;
+                m_BrickCacheSizeZDropDown.interactable = false;
+                m_CPUBrickCacheSizeDropDown.interactable = false;
+                m_BenchmarkToggle.interactable = false;
+
                 m_FilepathInputField.textComponent.color = Color.red;
                 Debug.LogError($"failed to import CVDS metadta from: {fp}");
-
             }
 
         }
 
-        void OnBrickSizeChange(int _) {
+        void OnBrickSizeChange(int _)
+        {
             List<TMP_Dropdown.OptionData> opts = new();
             int brick_size = Int32.Parse(m_BrickSizeDropDown.options[m_BrickSizeDropDown.value].text);
-            for (int i = 0; (i * brick_size) <= SystemInfo.maxTexture3DSize; ++i) {
+            for (int i = 0; (i * brick_size) <= SystemInfo.maxTexture3DSize; ++i)
+            {
                 opts.Add(new((i * brick_size).ToString()));
             }
             m_BrickCacheSizeXDropDown.options = opts;
             m_BrickCacheSizeYDropDown.options = opts;
             m_BrickCacheSizeZDropDown.options = opts;
-
         }
 
         void OnImportClick() => InitializationEvents.OnMetadataImport?.Invoke(
             new Tuple<CVDSMetadata, VolumeInitializationParams>(
               m_CurrentMetadata,
-              new VolumeInitializationParams() {
+              new VolumeInitializationParams()
+              {
                   brickSize = Int32.Parse(m_BrickSizeDropDown.options[m_BrickSizeDropDown.value].text),
                   highestResolutionLvl = Int32.Parse(m_HighestResLvlDropDown.options[m_HighestResLvlDropDown.value].text),
                   nbrImporterThreads = Int32.Parse(m_NbrImporterThreadsDropDown.options[m_NbrImporterThreadsDropDown.value].text),
@@ -163,7 +158,8 @@ namespace UnityCTVisualizer {
                       Int32.Parse(m_BrickCacheSizeYDropDown.options[m_BrickCacheSizeYDropDown.value].text),
                       Int32.Parse(m_BrickCacheSizeZDropDown.options[m_BrickCacheSizeZDropDown.value].text)
                   ),
-                  CPUBrickCacheSizeMB = Int32.Parse(m_CPUBrickCacheSizeDropDown.options[m_CPUBrickCacheSizeDropDown.value].text)
+                  CPUBrickCacheSizeMB = Int32.Parse(m_CPUBrickCacheSizeDropDown.options[m_CPUBrickCacheSizeDropDown.value].text),
+                  benchmark = m_BenchmarkToggle.isOn,
               })
             );
     }

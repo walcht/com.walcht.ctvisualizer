@@ -251,7 +251,7 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
                         return fixed4(0.0f, 1.0f, 0.0f, 1.0f);
                         /// REMOVE
 
-                        // skip the empty page directory entry
+                        // skip the homogeneous page directory entry
                         float a = max(skip_page_directory_entry(accm_ray, ray.dir, res_lvl) + epsilon, step_size);
                         t += a;
 
@@ -272,12 +272,13 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
                         return fixed4(a, a, a, a) * 100;
 #endif
 
-                        if (nbr_requested_bricks < _MaxNbrBrickRequestsPerRay) {
+                        if (nbr_requested_bricks < _MaxNbrBrickRequestsPerRay)
+                        {
                            requests[nbr_requested_bricks] = getBrickID(accm_ray, res_lvl);
                            ++nbr_requested_bricks;
                         }
 
-                        // break because there is nothing to be sampled
+                        // continue because there is nothing to be sampled
                         continue;
                     }
 
@@ -286,7 +287,7 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
                     src.rgb *= src.a;
                     accm_color += (1.0f - accm_color.a) * src;
 
-                    // advance to nex sample
+                    // advance to next sample
                     t += step_size;
 
                     // early-ray-termination optimization technique

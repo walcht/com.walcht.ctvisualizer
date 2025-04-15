@@ -14,7 +14,7 @@
         - Maximal residency octree depth SHOULD BE less than or equal to 15
 */
 
-Shader "UnityCTVisualizer/DVR_outofcore"
+Shader "UnityCTVisualizer/ooc_dvr_hybrid_shader"
 {
     Properties
 	{
@@ -25,7 +25,7 @@ Shader "UnityCTVisualizer/DVR_outofcore"
 		_AlphaCutoff("Opacity Cutoff", Range(0.0, 1.0)) = 0.95
         _SamplingQualityFactor("Sampling quality factor (multiplier) [type: float]", Range(0.1, 3.0)) = 1.00
         _LODQualityFactor("LOD quality factor", Range(0.1, 5)) = 3
-        // _MaxResLvl("Max allowed resolution level (inclusive)", Integer) = 0
+        _MaxResLvl("Max allowed resolution level (inclusive)", Integer) = 0
         _VolumeTexelSize("Size of one voxel (or texel) in the volumetric dataset", Vector) = (1, 1, 1)
         _BrickCacheDims("Brick cache dimensions [type: int]", Vector) = (1, 1, 1)
         _BrickCacheNbrBricks("Number of bricks along each dimension of the brick cache [type: int]", Vector) = (1, 1, 1)
@@ -247,26 +247,48 @@ Shader "UnityCTVisualizer/DVR_outofcore"
                 return 0;// min(floor(d / _LODQualityFactor), _MaxResLvl);
             }
 
+            
+            /// <summary>
+            ///     Computes a delta distance along a given ray position and direction so that p + dir * delta is
+            ///     the exiting intersection of the provided node.
+            /// </summary>
+            float skip_page_directory_entry(float3 p, float3 dir, int res_lvl)
+            {
+                // a page directory entry is mapped to a spatial extent in the volumetric
+                // dataset. This extent has to be skipped.
+                Box aabb;
+                float3 sides = (_BrickSize << res_lvl) * _VolumeTexelSize;
+                aabb.min = float3(int3(p / sides) * sides);
+                aabb.max = aabb.min + sides;
+                return slabs(p, dir, aabb);
+            }
+
+
             /// <summary>
             ///     TODO
             /// </summary>
-            int chooseTraversalDepth(/* float step_size */) {
-                return 2;
+            int chooseTraversalDepth(/* float step_size */)
+            {
+                return _MaxOctreeDepth;
             }
+
 
             /// <summary>
             ///     Returns whether the node is homogenous by compairing its min and max densities 
             /// </summary>
-            bool isHomogenous(int node_idx) {
+            bool isHomogenous(int node_idx)
+            {
                 return ((residency_octree[node_idx].data >> 0) & 0xFF)
                     == ((residency_octree[node_idx].data >> 8) & 0xFF);
             }
+
 
             /// <summary>
             ///     Computes a delta distance along a given ray position and direction so that p + dir * delta is
             ///     the exiting intersection of the provided node.
             /// </summary>
-            float skipNode(int node_idx, float3 p, float3 dir) {
+            float skipNode(int node_idx, float3 p, float3 dir)
+            {
                 Box aabb;
                 aabb.min = float3(residency_octree[node_idx].center_x - residency_octree[node_idx].side_halved,
                     residency_octree[node_idx].center_y - residency_octree[node_idx].side_halved,
@@ -277,51 +299,32 @@ Shader "UnityCTVisualizer/DVR_outofcore"
                 return slabs(p, dir, aabb);
             }
 
-            bool isPartiallyMapped(int node_idx, int res_lvl) {
+            bool isPartiallyMapped(int node_idx, int res_lvl)
+            {
                 return ((residency_octree[node_idx].data >> (16 + res_lvl)) & 1) == 1;
             }
 
-            uint getBrickID(float3 p, int res_lvl) {
+            uint getBrickID(float3 p, int res_lvl)
+            {
                 uint3 d = (p * _VolumeDims[res_lvl]) / _BrickSize;
                 return (d.z * (nbr_bricks_per_res_lvl[res_lvl].x * nbr_bricks_per_res_lvl[res_lvl].y)
                     + d.y * (nbr_bricks_per_res_lvl[res_lvl].x) + d.x) | (res_lvl << 26);
             }
 
-            int3 get_page_dir_offset(float3 p, int res_lvl) {
+            int3 get_page_dir_offset(float3 p, int res_lvl)
+            {
                 return int3((p * _VolumeDims[0]) / (_BrickSize << res_lvl));
             }
 
             /// <summary>
             ///     TODO: verify this is absolutely correct
             /// </summary>
-            int getChildNodeIndex(int parent_idx, float3 p) {
+            int getChildNodeIndex(int parent_idx, float3 p)
+            {
                 int3 offset = int3(frac(p / (residency_octree[parent_idx].side_halved * 2)) / 0.5f);
                 return 8 * parent_idx + 1 + (4 * offset.z + 2 * offset.y + offset.x);
             }
 
-            bool tryGetBrick(float3 p, int res_lvl, out float4 brick_pos, out float3 offset_within_brick)
-            {
-                int3 page_dir_offset = get_page_dir_offset(p, res_lvl);
-                int4 page_dir_addrs = int4(_PageDirBase[res_lvl].xyz  + page_dir_offset, 0);
-                page_dir_entry = _PageDir.Load(page_dir_addrs);
-
-                uint paging_flag = page_dir_entry.w;
-                if (paging_flag == UNMAPPED_PAGE_TABLE_ENTRY) return false;
-
-                offset_within_brick = fmod(p * _VolumeDims[res_lvl], (float)_BrickSize) * _BrickCacheVoxelSize.xyz;
-                brick_pos = float4(page_dir_entry.xyz + offset_within_brick, 0);
-                sampled_density = tex3Dlod(_BrickCache, brick_pos).r;
-
-                // then report the brick cache usage for this frame
-                int brick_idx =
-                    (_BrickCacheNbrBricks.x * _BrickCacheNbrBricks.y * round(page_dir_entry.z * _BrickCacheNbrBricks.z))
-                    + (_BrickCacheNbrBricks.x * round(page_dir_entry.y * _BrickCacheNbrBricks.y)) +
-                    round(page_dir_entry.x * _BrickCacheNbrBricks.x);
-                // indicate that this brick cache slot was used in this frame
-                brick_cache_usage[brick_idx] = BRICK_CACHE_SLOT_USED;
-
-                return true;
-            }
 
             /// <summary>
             ///     Tries to get an alternative brick that is resident in cache. The residency node
@@ -379,8 +382,7 @@ Shader "UnityCTVisualizer/DVR_outofcore"
                 float epsilon = step_size / 100.0f;
                 float4 accm_color = float4(0.0f, 0.0f, 0.0f, 0.0f);
 
-                int prev_res_lvl = -1;
-                int3 prev_page_dir_offset = int3(-1, -1, -1);
+                int4 prev_page_dir_addrs = int4(-1, -1, -1, -1);
                 float4 page_dir_entry;
 
 #if VISUALIZE_RANDOM_BRICK_REQUESTS_TEX
@@ -406,10 +408,12 @@ Shader "UnityCTVisualizer/DVR_outofcore"
                         if (isHomogenous(node_idx))
                         {
                             // EPSILON is added to avoid infinite loop where exit point lies on one of the node's faces
-                            t += skipNode(node_idx, accm_ray, ray.dir) + epsilon;
+                            t += max(skipNode(node_idx, accm_ray, ray.dir) + epsilon, step_size);
+
                             // the density has to be normalized in the same manner OpenGL/Vulkan normalizes an R8_UNORM
                             // texture. See: https://www.khronos.org/opengl/wiki/Normalized_Integer
                             float sampled_density = (residency_octree[node_idx].data & 0xFF) / 255.0f;
+
                             // blending
                             float4 src = tex2Dlod(_TFColors, float4(sampled_density, 0.0f, 0.0f, 0.0f));
                             src.rgb *= src.a;
@@ -420,13 +424,15 @@ Shader "UnityCTVisualizer/DVR_outofcore"
                         // if this node is not partially mapped => request the corresponding brick & skip the node
                         if (!isPartiallyMapped(node_idx, res_lvl))
                         {
-                            t += skipNode(node_idx, accm_ray, ray.dir) + epsilon;
+                            t += max(skipNode(node_idx, accm_ray, ray.dir) + epsilon, step_size);
+
                             // try to report brick request so that the node becomes partially mapped
                             if (nbr_requested_bricks < _MaxNbrBrickRequestsPerRay)
                             {
                                 requests[nbr_requested_bricks] = getBrickID(accm_ray, res_lvl);
                                 ++nbr_requested_bricks;
                             }
+
                             break;
                         }
 
@@ -437,25 +443,74 @@ Shader "UnityCTVisualizer/DVR_outofcore"
                         }
                         
                         // at this point maximal traversal depth is reached => node_idx is a leaf node
-                        float4 brick_pos;
-                        float3 brick_offset;
-                        if (tryGetBrick(accm_ray, res_lvl, brick_pos, brick_offset))
+                        int4 page_dir_addrs = int4(_PageDirBase[res_lvl].xyz + get_page_dir_offset(accm_ray, res_lvl), 0);
+
+                        // exploit spatial coherency to avoid expensive texture lookups
+                        if (any(page_dir_addrs != prev_page_dir_addrs))
+                        {
+                            page_dir_entry = _PageDir.Load(page_dir_addrs);
+                            prev_page_dir_addrs = page_dir_addrs;
+                        }
+
+                        uint paging_flag = page_dir_entry.w;
+
+                        if ((paging_flag != HOMOGENEOUS_PAGE_TABLE_ENTRY) && (paging_flag != UNMAPPED_PAGE_TABLE_ENTRY))
                         {
                             t += step_size;
-                            float sampled_density = tex3Dlod(_BrickCache, float4(brick_pos + brick_offset, 0.0f)).r;
+
+                            float3 offset_within_brick = fmod(accm_ray * _VolumeDims[res_lvl],
+                                (float)_BrickSize) * _BrickCacheVoxelSize.xyz;
+                            float4 brick_pos = float4(page_dir_entry.xyz + offset_within_brick, 0);
+                            float sampled_density = tex3Dlod(_BrickCache, brick_pos).r;
+
+                            // then report the brick cache usage for this frame
+                            int brick_idx =
+                                (_BrickCacheNbrBricks.x * _BrickCacheNbrBricks.y * round(page_dir_entry.z * _BrickCacheNbrBricks.z)) +
+                                (_BrickCacheNbrBricks.x * round(page_dir_entry.y * _BrickCacheNbrBricks.y)) +
+                                round(page_dir_entry.x * _BrickCacheNbrBricks.x);
+
+                            // indicate that this brick cache slot was used in this frame
+                            brick_cache_usage[brick_idx] = BRICK_CACHE_SLOT_USED;
+
                             // blending
                             float4 src = tex2Dlod(_TFColors, float4(sampled_density, 0.0f, 0.0f, 0.0f));
                             src.rgb *= src.a;
                             accm_color += (1.0f - accm_color.a) * src;
                         }
-                        else
+                        else if(paging_flag == HOMOGENEOUS_PAGE_TABLE_ENTRY)
                         {
-                            t += step_size;
-                            // try to report brick request
-                            if (nbr_requested_bricks < _MaxNbrBrickRequestsPerRay) {
+                            // skip the homogeneous page directory entry
+                            float a = max(skip_page_directory_entry(accm_ray, ray.dir, res_lvl) + epsilon, step_size);
+                            t += a;
+
+#if VISUALIZE_PAGE_TABLE_ENTRY_SPACE_SKIPPING 
+                            return fixed4(a, a, a, a) * 100;
+#endif
+
+                            float sampled_density = page_dir_entry.x / 255.0f;
+
+                            // blending
+                            float4 src = tex2Dlod(_TFColors, float4(sampled_density, 0.0f, 0.0f, 0.0f));
+                            src.rgb *= src.a;
+                            accm_color += (1.0f - accm_color.a) * src;
+
+                        }
+                        else 
+                        {
+                            // skip the unmapped page directory entry - we don't want to add very small deltas
+                            float a = max(skip_page_directory_entry(accm_ray, ray.dir, res_lvl) + epsilon, step_size);
+                            t += a;
+
+#if VISUALIZE_PAGE_TABLE_ENTRY_SPACE_SKIPPING 
+                            return fixed4(a, a, a, a) * 100;
+#endif
+                            
+                            if (nbr_requested_bricks < _MaxNbrBrickRequestsPerRay)
+                            {
                                 requests[nbr_requested_bricks] = getBrickID(accm_ray, res_lvl);
                                 ++nbr_requested_bricks;
                             }
+
                             // tryGetAlternativeBrick(node_idx, accm_ray, res_lvl, brick_pos);
                             // TODO: doesn't it make more sense to skip entire brick here?
                         }

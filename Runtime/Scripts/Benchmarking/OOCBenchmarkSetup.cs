@@ -1,7 +1,7 @@
 using UnityEngine;
-using System.Collections.Generic;
 using Newtonsoft.Json;
 using System.IO;
+using System;
 
 namespace UnityCTVisualizer
 {
@@ -9,8 +9,9 @@ namespace UnityCTVisualizer
     ///     Out-of-core benchmarking setup. Attach to a volumetric object to enable a benchmarking
     ///     setup. Results are reported in the debug console.
     /// </summary>
-    public class OOCVolObjectSetup : MonoBehaviour
+    public class OOCBenchmarkSetup : MonoBehaviour
     {
+
         private interface IState
         {
             public void OnEnter();
@@ -18,14 +19,21 @@ namespace UnityCTVisualizer
             public void OnExit();
         }
 
+        private class OutOfCoreBenchmarks
+        {
+            public float[] FrameTimes;
+            public float[] FCTTimes;
+        }
+
         private class BrickCacheWarmupState : IState
         {
-            private OOCVolObjectSetup m_controller;
+            private OOCBenchmarkSetup m_controller;
             private double start_time;
             private float rotation_speed = 30.0f;
             private float duration = 3.0f;
 
-            public BrickCacheWarmupState(OOCVolObjectSetup controller)
+
+            public BrickCacheWarmupState(OOCBenchmarkSetup controller)
             {
                 m_controller = controller;
             }
@@ -55,21 +63,20 @@ namespace UnityCTVisualizer
 
         private class FrameTimeMeasurementsState : IState
         {
-            private OOCVolObjectSetup m_controller;
+            private OOCBenchmarkSetup m_controller;
 
             private float rotation_speed = 30.0f;
             private Vector3 m_rotation_axis;
 
             private readonly int MAX_NBR_FRAMES = 2000;
 
-            private float[] frame_times;
             private int nbr_frames = 0;
             public int randomize_rot_axis_every_nth_frame = 250;
 
-            public FrameTimeMeasurementsState(OOCVolObjectSetup controller)
+            public FrameTimeMeasurementsState(OOCBenchmarkSetup controller)
             {
                 m_controller = controller;
-                frame_times = new float[MAX_NBR_FRAMES];
+                m_controller.m_ooc_benchmarks.FrameTimes = new float[MAX_NBR_FRAMES];
             }
 
             public void OnEnter()
@@ -85,7 +92,7 @@ namespace UnityCTVisualizer
                     return;
                 }
                 m_controller.transform.Rotate(m_rotation_axis, rotation_speed * Time.deltaTime, Space.Self);
-                frame_times[nbr_frames] = Time.unscaledDeltaTime * 1000;
+                m_controller.m_ooc_benchmarks.FrameTimes[nbr_frames] = Time.unscaledDeltaTime * 1000;
                 ++nbr_frames;
                 if (nbr_frames % randomize_rot_axis_every_nth_frame == 0)
                 {
@@ -95,16 +102,7 @@ namespace UnityCTVisualizer
 
             public void OnExit()
             {
-                string fp = @"C:\Users\walid\Desktop\benchmarks\FrameTimeMeasurementsState.json";
-                using (StreamWriter sw = File.CreateText(fp))
-                {
-                    JsonSerializer serializer = new()
-                    {
-                        Formatting = Formatting.Indented
-                    };
-                    serializer.Serialize(sw, frame_times);
-                }
-                Debug.Log($"FrameTimeMeasurementsState done. Json at: {fp}");
+                Debug.Log("FrameTimeMeasurementsState done.");
             }
 
             void RandomizeRotationAxis()
@@ -123,22 +121,20 @@ namespace UnityCTVisualizer
 
         private class FCTMeasurementState : IState
         {
-            private OOCVolObjectSetup m_controller;
+            private OOCBenchmarkSetup m_controller;
             private double start_time;
             private Vector3 look_at_point;
 
-            public int nbr_measurements = 10;
+            public int MAX_NBR_MEASUREMENTS = 10;
+            private int nbr_measurements = 0;
 
             // in seconds
             private float threshold = 5;
 
-            // hold measurements
-            private List<float> m_fct_measurements;
-
-            public FCTMeasurementState(OOCVolObjectSetup controller)
+            public FCTMeasurementState(OOCBenchmarkSetup controller)
             {
                 m_controller = controller;
-                m_fct_measurements = new List<float>(nbr_measurements);
+                m_controller.m_ooc_benchmarks.FCTTimes = new float[MAX_NBR_MEASUREMENTS];
             }
 
             public void OnEnter()
@@ -155,7 +151,6 @@ namespace UnityCTVisualizer
             {
                 if (Time.realtimeSinceStartupAsDouble - start_time > threshold)
                 {
-                    m_fct_measurements.Add(float.PositiveInfinity);
                     m_controller.TransitionToState(null);
                     return;
                 }
@@ -165,28 +160,29 @@ namespace UnityCTVisualizer
             {
                 VolumetricObject.OnNoMoreBrickRequests -= OnNoMoreBrickRequests;
 
-                string fp = @"C:\Users\walid\Desktop\benchmarks\FCTMeasurementState.json";
+                string fp = Path.Join(m_controller.output_dir, $"ooc_benchmarks_{DateTimeOffset.Now.ToUnixTimeMilliseconds()}.json");
                 using (StreamWriter sw = File.CreateText(fp))
                 {
                     JsonSerializer serializer = new()
                     {
                         Formatting = Formatting.Indented
                     };
-                    serializer.Serialize(sw, m_fct_measurements);
+                    serializer.Serialize(sw, m_controller.m_ooc_benchmarks);
                 }
-                Debug.Log($"FCTMeasurementState done. Json at: {fp}");
-                Debug.Log("benchmarking done.");
+                Debug.Log($"benchmarking saved at {fp}");
             }
 
             private void OnNoMoreBrickRequests()
             {
-                m_fct_measurements.Add((float)((Time.realtimeSinceStartupAsDouble - start_time) * 1000));
-                RandomizeLookAtPoint();
-                start_time = Time.realtimeSinceStartupAsDouble;
-                if (m_fct_measurements.Count >= nbr_measurements)
+                m_controller.m_ooc_benchmarks.FCTTimes[nbr_measurements] =
+                    (float)((Time.realtimeSinceStartupAsDouble - start_time) * 1000);
+                ++nbr_measurements;
+                if (nbr_measurements >= MAX_NBR_MEASUREMENTS)
                 {
                     m_controller.TransitionToState(null);
                 }
+                RandomizeLookAtPoint();
+                start_time = Time.realtimeSinceStartupAsDouble;
             }
 
             private void RandomizeLookAtPoint()
@@ -202,7 +198,10 @@ namespace UnityCTVisualizer
             }
         }
 
+        public string output_dir;
         private IState m_curr_state = null;
+        private OutOfCoreBenchmarks m_ooc_benchmarks;
+
 
         void Start()
         {

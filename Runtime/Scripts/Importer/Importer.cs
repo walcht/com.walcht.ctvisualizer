@@ -372,7 +372,6 @@ namespace UnityCTVisualizer
         public static void LoadAllBricksIntoCache(CVDSMetadata metadata, int brick_size, int resolution_lvl,
             MemoryCache<byte> cache, ConcurrentQueue<UInt32> brick_reply_queue, int nbr_importer_threads = -1)
         {
-            Stopwatch stopwatch = Stopwatch.StartNew();
             long total_nbr_bricks = metadata.NbrChunksPerResolutionLvl[resolution_lvl].x *
                 metadata.NbrChunksPerResolutionLvl[resolution_lvl].y *
                 metadata.NbrChunksPerResolutionLvl[resolution_lvl].z *
@@ -397,9 +396,7 @@ namespace UnityCTVisualizer
                 // increment progress value by 1
                 ProgressHandlerEvents.OnRequestProgressValueIncrement?.Invoke();
             });
-            stopwatch.Stop();
-            ProgressHandlerEvents.OnRequestProgressMessageUpdate?.Invoke($"all {total_nbr_bricks} bricks uploaded in {stopwatch.Elapsed.TotalSeconds:0.00}s");
-            UnityEngine.Debug.Log($"uploading to host memory cache took: {stopwatch.Elapsed}s");
+            ProgressHandlerEvents.OnRequestProgressMessageUpdate?.Invoke($"all {total_nbr_bricks} bricks uploaded");
         }
 
         public static void GenerateHomogeneousBrick<T>(UInt32 brick_id, int brick_size, T fill_value,
