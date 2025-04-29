@@ -60,7 +60,6 @@ namespace UnityCTVisualizer
         private readonly int SHADER_LOD_QUALITY_FACTOR_ID = Shader.PropertyToID("_LODQualityFactor");
         private readonly int SHADER_MAX_RES_LVL_ID = Shader.PropertyToID("_MaxResLvl");
 
-
         private readonly int MAX_IN_FLIGHT_BRICK_IMPORTS = 6;
 
         /////////////////////////////////
