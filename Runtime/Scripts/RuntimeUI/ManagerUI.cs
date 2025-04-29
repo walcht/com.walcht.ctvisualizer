@@ -63,7 +63,7 @@ namespace UnityCTVisualizer
             }
         }
 
-        void OnMetadataImport(Tuple<CVDSMetadata, VolumeInitializationParams> args)
+        void OnMetadataImport(Tuple<CVDSMetadata, PipelineParams, DebugginParams> args)
         {
             m_MetadataUI.Init(args.Item1);
             m_MetadataUI.gameObject.SetActive(true);
@@ -75,7 +75,7 @@ namespace UnityCTVisualizer
             m_VisualizationParamsUI.gameObject.SetActive(true);
         }
 
-        void OnHistogramImport(List<UInt64> histogram)
+        void OnHistogramImport(UInt64[] histogram)
         {
             m_TransferFunction1DUI.SetHistogram(histogram);
         }

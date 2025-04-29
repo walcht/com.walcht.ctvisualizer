@@ -35,6 +35,10 @@
     {
       "name": "HSV Color Picker",
       "url": "https://github.com/walcht/com.walcht.vrcolorpicker.git"
+    },
+    {
+      "name": "Unity D3",
+      "url": "https://github.com/walcht/com.walcht.unityd3.git"
     }
   ]
 }

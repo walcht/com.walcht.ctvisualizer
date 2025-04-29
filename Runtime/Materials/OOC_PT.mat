@@ -30,7 +30,7 @@ Material:
     - _BrickRequestsRandomTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
-        m_Offset: {x: -0.79418635, y: 0.6973922}
+        m_Offset: {x: 0.20491946, y: -0.56964874}
     - _BumpMap:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -81,7 +81,7 @@ Material:
     - _MaxNbrBrickRequestsPerRay: 1
     - _MaxResLvl: 4
     m_Floats:
-    - _AlphaCutoff: 0.99607843
+    - _AlphaCutoff: 0.91
     - _BumpScale: 1
     - _Cutoff: 0.5
     - _DetailNormalMapScale: 1
@@ -89,12 +89,12 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _LODQualityFactor: 0
+    - _LODQualityFactor: 1.3920002
     - _Metallic: 0
     - _Mode: 0
     - _OcclusionStrength: 1
     - _Parallax: 0.02
-    - _SamplingQualityFactor: 1
+    - _SamplingQualityFactor: 1.4560001
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
     - _SrcBlend: 1

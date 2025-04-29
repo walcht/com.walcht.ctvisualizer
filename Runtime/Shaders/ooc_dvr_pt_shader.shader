@@ -65,7 +65,7 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
 
             float _AlphaCutoff = 254.0f / 255.0f;
             float _SamplingQualityFactor = 1.0f;
-            float _LODQualityFactor = 1.0f;
+            float _LODQualityFactor = 2.0f;
             int _MaxResLvl = 0;
 
 
@@ -211,7 +211,7 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
                     int res_lvl = chooseDesiredResolutionLevel(accm_ray);
 
                     // adaptive ray sampling technique
-                    // step_size = adpatSamplingDistance(step_size, res_lvl);
+                    step_size = adpatSamplingDistance(step_size, res_lvl);
 
                     // sample current position
                     float sampled_density = 0.0f;
@@ -247,10 +247,6 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
 
                     else if (paging_flag == HOMOGENEOUS_PAGE_TABLE_ENTRY)
                     {
-                        /// REMOVE
-                        return fixed4(0.0f, 1.0f, 0.0f, 1.0f);
-                        /// REMOVE
-
                         // skip the homogeneous page directory entry
                         float a = max(skip_page_directory_entry(accm_ray, ray.dir, res_lvl) + epsilon, step_size);
                         t += a;

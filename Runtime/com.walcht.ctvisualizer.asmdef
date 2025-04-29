@@ -4,8 +4,8 @@
   "references": [
     "Unity.TextMeshPro",
     "Unity.InputSystem",
-    "SimpleFileBrowser.Runtime",
-    "HSVPicker"
+    "HSVPicker",
+    "walcht.unityd3"
   ],
   "optionalUnityReferences": [],
   "includePlatforms": [],

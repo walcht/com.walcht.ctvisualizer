@@ -1,13 +1,13 @@
 using System;
-using System.Collections.Generic;
 
 namespace UnityCTVisualizer {
     public static class InitializationEvents {
         /// <summary>
         ///     Invoked when a CVDS metadata is successfully imported. The CVDSMetadata instance along with additional
-        ///     initialization parameters that are used to create the volumetric object are passed to the handler(s).
+        ///     runtime-constant pipeline parameters and debugging parametrs that are used to create the volumetric object
+        ///     are passed to the handler(s).
         /// </summary>
-        public static Action<Tuple<CVDSMetadata, VolumeInitializationParams>> OnMetadataImport;
+        public static Action<Tuple<CVDSMetadata, PipelineParams, DebugginParams>> OnMetadataImport;
 
         /// <summary>
         ///     Invoked when a volumetric dataset is successfully created. The VolumetricDataset ScriptableObject
@@ -15,7 +15,7 @@ namespace UnityCTVisualizer {
         /// </summary>
         public static Action<VolumetricDataset> OnVolumetricDatasetCreation;
 
-        public static Action<List<UInt64>> OnHistogramImport;
+        public static Action<UInt64[]> OnHistogramImport;
     }
 }
 

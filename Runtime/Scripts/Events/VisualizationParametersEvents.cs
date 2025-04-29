@@ -1,17 +1,30 @@
 using System;
-using UnityEngine;
 
 namespace UnityCTVisualizer
 {
-    public struct VolumeInitializationParams
+    public struct PipelineParams
     {
-        public int brickSize;
-        public int highestResolutionLvl;
-        public int nbrImporterThreads;
-        public Vector3Int brick_cache_size;
-        public RenderingMode rendering_mode;
-        public int CPUBrickCacheSizeMB;
-        public bool benchmark;
+        public RenderingMode RenderingMode;
+        public int BrickSize;
+        public int MaxNbrImporterThreads;
+        public int MaxNbrGPUBrickUploadsPerFrame;
+        public int GPUBrickCacheSizeMBs;
+        public int CPUBrickCacheSizeMBs;
+        public int InCoreMaxResolutionLvl;
+        public int MaxNbrBrickRequestsPerFrame;
+        public int MaxNbrBrickRequestsPerRay;
+        public int OctreeMaxDepth;
+        public int OctreeStartDepth;
+        public int BrickRequestsRandomTexSize;
+    }
+
+    public struct DebugginParams
+    {
+        public bool Benchmark;
+        public bool BrickWireframes;
+        public bool VisualizeHomogeneousRegions;
+        public int RandomSeed;
+        public bool RandomSeedValid;
     }
 
     public static class VisualizationParametersEvents

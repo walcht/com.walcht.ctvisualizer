@@ -2,7 +2,7 @@ Shader "UnityCTVisualizer/HistogramShader"
 {
     Properties
     {
-        [NoScaleOffset] _MainTex ("Densities frequency 1D-ish texture", 2D) = "green" {}
+        _MainTex ("Densities frequency 1D-ish texture", 2D) = "green" {}
         _BinColor("Bins color", Color) = (1.0, 1.0, 1.0, 1.0)
         _BackgroundColor("Background color", Color) = (0.0, 0.0, 0.0, 1.0)
         _PlotColor("Alpha plot color", Color) = (0.0, 1.0, 0.0, 1.0)
@@ -23,6 +23,7 @@ Shader "UnityCTVisualizer/HistogramShader"
 
             
             sampler2D _MainTex;
+            float4 _MainTex_ST;
             float4 _BinColor;
             float4 _BackgroundColor;
             float4 _PlotColor;
@@ -44,7 +45,7 @@ Shader "UnityCTVisualizer/HistogramShader"
             {
                 v2f o;
                 o.vertex = UnityObjectToClipPos(vertex);
-                o.uv = uv;
+                o.uv =  TRANSFORM_TEX(uv, _MainTex);
                 return o;
             }
 

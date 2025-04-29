@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -32,6 +30,13 @@ namespace UnityCTVisualizer
         public uint data;          // 4 bytes
     }
 
+    public struct VDHM
+    {
+        public int tolerance;
+        public double penalty;
+        public double measure;
+    }
+
 
     public class CVDSMetadata
     {
@@ -59,10 +64,32 @@ namespace UnityCTVisualizer
             [JsonProperty("color_depth")]
             public int ColorDepth { get; set; }
 
+            [JsonProperty("force_8bit_conversion")]
+            public bool ConvertedToUInt8 { get; set; }
+
             [JsonProperty("lz4_compressed")]
             public bool Lz4Compressed { get; set; }
+
             [JsonProperty("decompressed_chunk_size_in_bytes")]
             public long DecompressedChunkSizeInBytes { get; set; }
+
+            [JsonProperty("vdhms")]
+            public double[][] VDHMs { get; set; }
+
+            [JsonProperty("octree_nrb_nodes")]
+            public long OctreeNbrNodes { get; set; }
+
+            [JsonProperty("octree_max_depth")]
+            public int OctreeMaxDepth { get; set; }
+
+            [JsonProperty("octree_smallest_subdivision")]
+            public float[] OctreeSmallestSubdivision { get; set; }
+
+            [JsonProperty("octree_size_in_bytes")]
+            public long OctreeSizeInBytes { get; set; }
+
+            [JsonProperty("histogram_nbr_bins")]
+            public int HistogramNbrBins { get; set; }
 
             [JsonProperty("voxel_dims")]
             public float[] VoxelDims { get; set; }
@@ -189,6 +216,29 @@ namespace UnityCTVisualizer
             {
                 throw new Exception($"invalid downsampling interpolation value {metadata.DownsamplingInter}. {e.Message}");
             }
+
+            ConvertedToUInt8 = metadata.ConvertedToUInt8;
+
+            // set octree properties
+            OctreeMaxDepth = metadata.OctreeMaxDepth;
+            OctreeNbrNodes = metadata.OctreeNbrNodes;
+            OctreeSizeInBytes = metadata.OctreeSizeInBytes;
+            OctreeSmallestSubdivision = new Vector3(metadata.OctreeSmallestSubdivision[0], metadata.OctreeSmallestSubdivision[1],
+                metadata.OctreeSmallestSubdivision[2]);
+
+            // set VDH measures
+            VDHMs = new VDHM[metadata.VDHMs.Length];
+            for (int i = 0; i < VDHMs.Length; ++i)
+                VDHMs[i] = new VDHM()
+                {
+                    measure = metadata.VDHMs[i][2],
+                    penalty = metadata.VDHMs[i][0],
+                    tolerance = (int)metadata.VDHMs[i][0]
+                };
+
+            // set histogram properties
+            HistogramNbrBins = metadata.HistogramNbrBins;
+
         }
 
         /// <summary>
@@ -197,42 +247,38 @@ namespace UnityCTVisualizer
         /// </summary>
         public string RootFilepath { get; private set; }
 
+        /// <summary>
+        ///     Chunks filepaths grouped per resolution level.
+        ///     Should be accessed as follows:
+        ///         <code>ChunkFilepaths[resolution_lvl][chunk_id]</code>
+        /// </summary>
+        public string[][] ChunkFilepaths { get; private set; }
+
+        /// <summary>
+        ///     Original dimension of the volumetric datasets (i.e., without paddings).
+        /// </summary>
         public Vector3Int Dims { get; private set; }
 
         /// <summary>
-        ///     Chunk size. Anisotropic (i.e., with different dimension sizes) are not supported. Additionally, chunk
+        ///     Chunk size. Anisotropic (i.e., with different dimensions) are not supported. Additionally, chunk
         ///     size is a power of two and should idealy be set to a value that allows for optimal filesystem read
         ///     speed.
         /// </summary>
         public int ChunkSize { get; private set; }
 
-        public long CompressedSizeInBytes { get; private set; }
-
         /// <summary>
-        ///     This is simply: ChunkSize * ChunkSize * ChunkSize * voxel_size_bytes with, for example,
-        ///     voxel_size_bytes = 2 in case ColorDepth is UINT16
+        ///     Number of chunks per each resolution level. Number of entries is equal to NbrResolutionLvls and each
+        ///     entry holds the number of chunks along each dimension (nbr_chunks_x, nbr_chunks_y, nbr_chunks_z).
         /// </summary>
-        public long DecompressedSizeInBytes { get; private set; }
+        public Vector3Int[] NbrChunksPerResolutionLvl { get; private set; }
+
+        public long CompressedSizeInBytes { get; private set; }
 
         /// <summary>
         ///     Number of resolution levels. Resolution level 0 corresponds to highest resolution, resolution level 1
         ///     is downsampled once from resolution level 0, and so on.
         /// </summary>
         public int NbrResolutionLvls { get; private set; }
-
-        public ColorDepth ColorDepth { get; private set; }
-
-        /// <summary>
-        ///     Whether the chunks are LZ4 compressed.
-        /// </summary>
-        public bool Lz4Compressed { get; private set; }
-
-        /// <summary>
-        ///     Physical dimensions in mm of a voxel (i.e., a 3D cube corresponding to a sampled region of space).
-        /// </summary>
-        public Vector3 VoxelDims { get; private set; }
-
-        public Vector3 EulerRotation { get; private set; }
 
         /// <summary>
         ///     Which downsampling interpolation is used to generate coarser volume chunks. Currently only trillinear
@@ -242,22 +288,72 @@ namespace UnityCTVisualizer
         public DownsamplingInterpolation DownsamplingInter { get; private set; }
 
         /// <summary>
-        ///     Number of chunks per each resolution level. Number of entries is equal to NbrResolutionLvls and each
-        ///     entry holds the number of chunks along each dimension (nbr_chunks_x, nbr_chunks_y, nbr_chunks_z).
+        ///     Color depth (or bits per pixel) of the attached chunks. Currently, only 8 bpp (i.e., uint_8) is
+        ///     supported. 16 bpp will potentially be added in the future.
         /// </summary>
-        public Vector3Int[] NbrChunksPerResolutionLvl { get; private set; }
+        public ColorDepth ColorDepth { get; private set; }
 
         /// <summary>
-        ///     Chunks filepaths grouped per resolution level. Should be accessed as follows:
-        ///     ChunkFilepaths[resolution_lvl][chunk_id]
+        ///     Whether the original volumetric dataset was converted to 8 bpp.
         /// </summary>
-        public string[][] ChunkFilepaths { get; private set; }
+        public bool ConvertedToUInt8 { get; set; }
 
+        /// <summary>
+        ///     Whether the chunks are LZ4 compressed.
+        /// </summary>
+        public bool Lz4Compressed { get; private set; }
+
+        /// <summary>
+        ///     This is simply: ChunkSize * ChunkSize * ChunkSize * voxel_size_bytes with, for example,
+        ///     voxel_size_bytes = 2 in case ColorDepth is UINT16
+        /// </summary>
+        public long DecompressedSizeInBytes { get; private set; }
+
+        /// <summary>
+        ///     Volumetric Dataset Homogeneity Measures (VDHM)s for different tolerance values.
+        ///     The tolerance is simply the threshold under which if the difference between an octree node's min and max
+        ///     values falls, the corresponding node is considered homogeneous.
+        /// </summary>
+        public VDHM[] VDHMs { get; private set; }
+
+        /// <summary>
+        ///     Total number of nodes in the residency octree.
+        /// </summary>
+        public long OctreeNbrNodes { get; private set; }
+
+        /// <summary>
+        ///     Inclusive max traversal depth of the residency octree. A smaller value can be chosen during runtime
+        ///     for potentially better performance (i.e., smaller tree size and shorter traversal loop).
+        /// </summary>
+        public int OctreeMaxDepth { get; private set; }
+
+        /// <summary>
+        ///     Smallest spatial extent (in voxels) covered by a residency octree leaf node at depth <paramref name="OctreeMaxDepth"/>.
+        ///     This gives an idea about the smallest skippable region and whether it makes sense, performance wise, to
+        ///     skip at such granularity.
+        /// </summary>
+        public Vector3 OctreeSmallestSubdivision { get; private set; }
+
+        /// <summary>
+        ///     Total size of the residency octree in bytes.
+        /// </summary>
+        public long OctreeSizeInBytes { get; private set; }
+
+        /// <summary>
+        ///     Number of bins in the generated histogram.
+        /// </summary>
+        public int HistogramNbrBins { get; set; }
+
+        /// <summary>
+        ///     Physical dimensions in mm of a voxel (i.e., a cuboid corresponding to a sampled region of space).
+        /// </summary>
+        public Vector3 VoxelDims { get; private set; }
+
+        public Vector3 EulerRotation { get; private set; }
     }
 
     public static class Importer
     {
-
         public static CVDSMetadata ImportMetadata(string dataset_path)
         {
             return new CVDSMetadata(dataset_path);
@@ -316,7 +412,7 @@ namespace UnityCTVisualizer
             string chunk_fp = metadata.ChunkFilepaths[resolution_lvl][chunk_id];
             byte[] source_data = File.ReadAllBytes(chunk_fp);
 
-            // TODO: add optimization for when chunk_size == brick_size
+            // TODO: add optimization for when chunk_size == BrickSize
             int brick_size_cubed = brick_size * brick_size * brick_size;
             int decompressed_size =  metadata.ChunkSize * metadata.ChunkSize * metadata.ChunkSize;
 
@@ -340,8 +436,6 @@ namespace UnityCTVisualizer
             {
                 decompressed_data = source_data;
             }
-
-
 
             if (import_whole_chunk)
             {
@@ -424,49 +518,73 @@ namespace UnityCTVisualizer
             cache.Set(brick_id, new CacheEntry<byte>(data, Math.Min(v0, v1), Math.Max(v0, v1)));
         }
 
-        public static List<ResidencyNode> ImportResidencyOctree(CVDSMetadata metadata)
+
+        /// <summary>
+        ///     Imports the residency octree from the provided CVDS metadata.
+        /// </summary>
+        /// 
+        /// <param name="metadata">
+        ///     CVDS metadata
+        /// </param>
+        /// 
+        /// <returns>
+        ///     Array of residency octree nodes.
+        /// </returns>
+        public static ResidencyNode[] ImportResidencyOctree(CVDSMetadata metadata)
         {
             string fp = Path.Join(metadata.RootFilepath, "residency_octree.bin");
             byte[] source_data = File.ReadAllBytes(fp);
-            List<ResidencyNode> data = new List<ResidencyNode>();
-            for (int i = 0; i < source_data.Length;)
+
+            Debug.Assert(metadata.OctreeNbrNodes == (source_data.Length / Marshal.SizeOf<ResidencyNode>()),
+                $"unexpected number of residency octree nodes from {fp}");
+
+            ResidencyNode[] data = new ResidencyNode[metadata.OctreeNbrNodes];
+            for (int i = 0, j = 0; i < source_data.Length; ++j, i += 20)
             {
                 float center_x = BitConverter.ToSingle(source_data, i);
-                i += 4;
-                float center_y = BitConverter.ToSingle(source_data, i);
-                i += 4;
-                float center_z = BitConverter.ToSingle(source_data, i);
-                i += 4;
-                float side_halved = BitConverter.ToSingle(source_data, i);
-                i += 4;
-                UInt32 _data = BitConverter.ToUInt32(source_data, i);
-                i += 4;
-                data.Add(new ResidencyNode()
+                float center_y = BitConverter.ToSingle(source_data, i + 4);
+                float center_z = BitConverter.ToSingle(source_data, i + 8);
+                float side_halved = BitConverter.ToSingle(source_data, i + 12);
+                UInt32 _data = BitConverter.ToUInt32(source_data, i + 16);
+                data[j] = new ResidencyNode()
                 {
                     center_x = center_x,
                     center_y = center_y,
                     center_z = center_z,
                     side_halved = side_halved,
                     data = _data
-                });
+                };
             }
-            UnityEngine.Debug.Assert(data.Count == (source_data.Length / Marshal.SizeOf<ResidencyNode>()));
             return data;
         }
 
-        public static List<UInt64> ImportHistogram(CVDSMetadata metadata)
+        /// <summary>
+        ///     Imports the generated histogram from the provided CVDS metadata.
+        /// </summary>
+        /// 
+        /// <param name="metadata">
+        ///     CVDS metadata. histogram.bin file is expected to be resident in the root directory of this CVDS
+        /// </param>
+        /// 
+        /// <returns>
+        ///     Array of binned densities where each entry is the number of densities that fall within its uniform range.
+        /// </returns>
+        public static UInt64[] ImportHistogram(CVDSMetadata metadata)
         {
             string fp = Path.Join(metadata.RootFilepath, "histogram.bin");
             byte[] source_data = File.ReadAllBytes(fp);
-            List<UInt64> data = new();
-            for (int i = 0; i < source_data.Length; i += 8)
+
+            Debug.Assert(metadata.HistogramNbrBins == (source_data.Length) / Marshal.SizeOf<UInt64>(),
+                $"unexpected number of histogram bins from {fp}");
+
+            UInt64[] data = new UInt64[metadata.HistogramNbrBins];
+
+            for (int i = 0, j = 0; i < source_data.Length; i += 8, ++j)
             {
                 UInt64 val = BitConverter.ToUInt64(source_data, i);
-                data.Add(val);
+                data[j] = val;
             }
             return data;
         }
-
-
     }
 }
