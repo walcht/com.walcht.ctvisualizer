@@ -54,16 +54,10 @@ namespace UnityCTVisualizer
         }
 
 
-        public void OnPointerEnter(PointerEventData eventData)
-        {
-            m_UIScrollAction.performed += OnScroll;
-        }
+        public void OnPointerEnter(PointerEventData eventData) => m_UIScrollAction.performed += OnScroll;
 
 
-        public void OnPointerExit(PointerEventData eventData)
-        {
-            m_UIScrollAction.performed -= OnScroll;
-        }
+        public void OnPointerExit(PointerEventData eventData) => m_UIScrollAction.performed -= OnScroll;
 
 
         private void OnScroll(InputAction.CallbackContext context)

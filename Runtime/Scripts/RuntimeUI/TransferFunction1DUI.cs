@@ -23,6 +23,8 @@ namespace UnityCTVisualizer
         [SerializeField] ColorGradientRangeUI m_GradientColorUI;
 
         [SerializeField] Button m_RemoveSelection;
+        [SerializeField] Button m_AddColor;
+        [SerializeField] Button m_AddAlpha;
         [SerializeField] Button m_ClearColors;
         [SerializeField] Button m_ClearAlphas;
         [SerializeField] Button m_ColorPicker;
@@ -148,6 +150,8 @@ namespace UnityCTVisualizer
             TransferFunctionEvents.ModelTF1DAlphaControlRemoval += OnModelTF1DAlphaControlRemoval;
 
             m_RemoveSelection.onClick.AddListener(OnRemoveSelectedControlPoint);
+            m_AddAlpha.onClick.AddListener(OnAddAlphaControlPointClick);
+            m_AddColor.onClick.AddListener(OnAddColorControlPointClick);
             m_ClearColors.onClick.AddListener(OnClearColorsClick);
             m_ClearAlphas.onClick.AddListener(OnClearAlphasClick);
             m_ColorPicker.onClick.AddListener(OnColorPickerClick);
@@ -171,6 +175,8 @@ namespace UnityCTVisualizer
             TransferFunctionEvents.ModelTF1DAlphaControlRemoval -= OnModelTF1DAlphaControlRemoval;
 
             m_RemoveSelection.onClick.RemoveAllListeners();
+            m_AddAlpha.onClick.RemoveAllListeners();
+            m_AddColor.onClick.RemoveAllListeners();
             m_ClearColors.onClick.RemoveAllListeners();
             m_ClearAlphas.onClick.RemoveAllListeners();
             m_ColorPicker.onClick.RemoveAllListeners();
@@ -731,6 +737,17 @@ namespace UnityCTVisualizer
         }
 
 
+        void OnAddAlphaControlPointClick()
+        {
+            if (m_AlphaControlPoints.Count < TransferFunction1D.MAX_ALPHA_CONTROL_POINTS - 2)
+            {
+                var cp = new ControlPoint<float, float>(0.5f, 0.5f);
+                // issue that this UI has requested the addittion of a new alpha control point
+                TransferFunctionEvents.ViewTF1DAlphaControlAddition?.Invoke(cp);
+            }
+        }
+
+
         void OnAddColorControlPoint(float xPos)
         {
             if (m_ColorControlPoints.Count < TransferFunction1D.MAX_COLOR_CONTROL_POINTS - 2)
@@ -740,6 +757,9 @@ namespace UnityCTVisualizer
                 TransferFunctionEvents.ViewTF1DColorControlAddition?.Invoke(cp);
             }
         }
+
+
+        void OnAddColorControlPointClick() => OnAddColorControlPoint(0.5f);
 
 
         void OnScaleYDomainRangeChange(float v0, float v1)
