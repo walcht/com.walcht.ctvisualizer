@@ -86,7 +86,6 @@ namespace UnityCTVisualizer
         private RenderingMode m_rendering_mode;
         private Texture2D m_brick_requests_random_tex = null;
         private byte[] m_brick_requests_random_tex_data;
-        private TextureFormat m_brick_cache_format;
         private int m_tex_plugin_format = (int)TextureSubPlugin.Format.UR8;
         private PipelineParams m_PipelineParams;
         private int m_brick_size;
@@ -772,11 +771,6 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ModelSamplingQualityFactorChange -= OnModelSamplingQualityFactorChange;
             VisualizationParametersEvents.ModelLODQualityFactorChange -= OnModelLODQualityFactorChange;
             VisualizationParametersEvents.ModelInterpolationChange -= OnModelInterpolationChange;
-
-            if (m_transfer_function != null)
-            {
-                m_transfer_function.TFColorsLookupTexChange -= OnTFColorsLookupTexChange;
-            }
 
             // clear UAV targets
             Graphics.ClearRandomWriteTargets();
@@ -1730,12 +1724,6 @@ namespace UnityCTVisualizer
         }
 
 
-        void OnTFColorsLookupTexChange(Texture2D new_colors_lookup_tex)
-        {
-            m_material.SetTexture(SHADER_TFTEX_ID, new_colors_lookup_tex);
-        }
-
-
         private void OnModelAlphaCutoffChange(float value)
         {
             m_vis_params_dirty = true;
@@ -1772,11 +1760,8 @@ namespace UnityCTVisualizer
 
         private void OnModelTFChange(TF tf, ITransferFunction tf_so)
         {
-            if (m_transfer_function != null)
-                m_transfer_function.TFColorsLookupTexChange -= OnTransferFunctionTexChange;
             m_transfer_function = tf_so;
-            m_transfer_function.TFColorsLookupTexChange += OnTFColorsLookupTexChange;
-            m_transfer_function.ForceUpdateColorLookupTexture();
+            m_material.SetTexture(SHADER_TFTEX_ID, m_transfer_function.GetColorLookupTex());
         }
 
 

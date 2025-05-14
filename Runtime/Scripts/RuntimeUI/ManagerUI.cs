@@ -77,7 +77,7 @@ namespace UnityCTVisualizer
 
         void OnHistogramImport(UInt64[] histogram)
         {
-            m_TransferFunction1DUI.SetHistogram(histogram);
+            m_TransferFunction1DUI.SetHistogramData(histogram);
         }
 
         void ProgressHandlerEvents_OnRequestActivate(bool val) => m_ProgressHandlerUI.gameObject.SetActive(val);

@@ -47,12 +47,13 @@ namespace UnityCTVisualizer
         //////////////////////////////////////////////// MISC ///////////////////////////////////////////////
         /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        const float DEFAULT_ARROW_ALPHA = 0.75f;
-        Vector3 m_PositionVect = new(0, 0, 0);
-        Vector2 m_AnchorMin = new(0, 0.0f);
-        Vector2 m_AnchorMax = new(0, 1.0f);
-        int m_ID;
-        ControlPoint<float, Color> m_ControlPoint;
+        private Vector2 m_AnchorMin = new(0, 0.0f);
+        private Vector2 m_AnchorMax = new(0, 1.0f);
+
+        private int m_ID;
+        private ControlPoint<float, Color> m_ControlPoint;
+
+
         public ControlPoint<float, Color> ControlPointData
         {
             get => m_ControlPoint;
@@ -96,17 +97,20 @@ namespace UnityCTVisualizer
             m_ControlPointTransform.anchorMin = m_AnchorMin;
             m_ControlPointTransform.anchorMax = m_AnchorMax;
             // don't forget to reset rect position after updating anchors
-            m_ControlPointTransform.anchoredPosition = m_PositionVect;
+            m_ControlPointTransform.anchoredPosition = Vector3.zero;
             m_PositionLabel.text = m_ControlPoint.Position.ToString("0.00");
         }
 
+
         /// <summary>
-        /// Sets the color for this control point; both in UI and in underlying control point data
+        ///     Sets the color for this control point; both in UI and in underlying control point data
         /// </summary>
-        /// <param name="col">new color value. Alpha component is ignored</param>
+        /// 
+        /// <param name="col">
+        ///     new color value. Alpha component is ignored
+        /// </param>
         public void SetColor(Color col)
         {
-            col.a = DEFAULT_ARROW_ALPHA;
             m_ControlPoint.Value = col;
             m_Image.color = m_ControlPoint.Value;
             return;

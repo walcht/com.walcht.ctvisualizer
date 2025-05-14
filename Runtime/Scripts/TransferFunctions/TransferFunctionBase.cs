@@ -1,78 +1,130 @@
 using System;
 using UnityEngine;
 
-namespace UnityCTVisualizer {
+namespace UnityCTVisualizer
+{
     public delegate void VoidHandler();
 
     [Serializable]
-    public class ControlPoint<P, T> {
+    public class ControlPoint<P, T>
+    {
         public VoidHandler OnValueChange;
 
         [SerializeField]
         P m_Position;
-        public P Position {
+        public P Position
+        {
             get => m_Position;
-            set {
+            set
+            {
                 m_Position = value;
                 OnValueChange?.Invoke();
             }
         }
 
+
         [SerializeField]
         T m_Value;
-        public T Value {
+        public T Value
+        {
             get => m_Value;
-            set {
+            set
+            {
                 m_Value = value;
                 OnValueChange?.Invoke();
             }
         }
 
-        public ControlPoint(P position, T value) {
+        public ControlPoint(P position, T value)
+        {
             Position = position;
             Value = value;
         }
     }
 
-    public interface ITransferFunction {
+    /// <summary>
+    ///     
+    /// </summary>
+    ///
+    /// <remarks>
+    ///     Intended workflow is for some MonoBehaviour to call TryUpdateColorLookupTex within its Update method:
+    ///
+    ///     <code>
+    ///     void Update()
+    ///     {
+    ///         // ...
+    ///         m_TransferFunction.TryUpdateColorLookupTex();
+    ///         // ...
+    ///     }
+    ///     </code>
+    ///     
+    ///     For any Shader requiring the color lookup texture, the texture should be retrieve initially using
+    ///     GetColorLookupTex.
+    ///     
+    /// </remarks>
+    public abstract class ITransferFunction
+    {
+        protected readonly Texture2D m_ColorLookupTex;
+        protected readonly byte[] m_RawTexData;
+        protected bool m_Dirty = true;
+
+
+        public ITransferFunction(int texWidth, int texHeight)
+        {
+            m_ColorLookupTex = new Texture2D(texWidth, texHeight, TextureFormat.RGBA32, mipChain: false,
+                linear: true);
+            m_ColorLookupTex.wrapModeU = TextureWrapMode.Clamp;
+            m_ColorLookupTex.wrapModeV = TextureWrapMode.Clamp;
+            m_RawTexData = new byte[texWidth * texHeight * 4];
+        }
+
 
         /// <summary>
-        ///     Initializes the transfer function default state (e.g., control points data for 1D TFs, shapes for 2D TFs, etc.).
+        ///     Tries to update the 2D color lookup texture if the internal dirty flag is set.
+        ///     Does nothing otherwise.
+        /// </summary>
+        public void TryUpdateColorLookupTex()
+        {
+            if (m_Dirty)
+            {
+                GenerateColorLookupTexData();
+                m_ColorLookupTex.SetPixelData(m_RawTexData, 0);
+                m_ColorLookupTex.Apply();
+                m_Dirty = false;
+            }
+        }
+
+
+        /// <summary>
+        ///     Gets the 2D color lookup texture managed by this transfer function.
         /// </summary>
         /// 
-        /// <remarks>
-        ///     Should be called initially (i.e., think of this as a constructor that should be called before any subsequent
-        ///     member calls/accesses)
-        /// </remarks>
-        void Init();
+        /// <returns>
+        ///     2D color lookup texture which is sampled using densities.
+        /// </returns>
+        public Texture GetColorLookupTex() => m_ColorLookupTex;
+
 
         /// <summary>
-        ///     Similar to <seealso cref="TryUpdateColorLookupTexture">TryUpdateColorLookupTexture</seealso>.
-        ///     Except that it ignores the dirty flag and forces the regeneration of the internal transfer
-        ///     function. Use this function sparingly.
+        ///     Generates raw color lookup data (assuming an RGBA32 texture format) and assigns it to the
+        ///     pre-allocated array <code>m_RawTexData</code>.
         /// </summary>
-        void ForceUpdateColorLookupTexture();
+        protected abstract void GenerateColorLookupTexData();
+
 
         /// <summary>
-        ///     Request an update for the internal transfer function. This checks a dirty flag then re-generates
-        ///     the texture if necessary.
+        ///     Serialized the transfer function data to persistent memory.
         /// </summary>
-        /// 
-        /// <remarks>
-        ///     Intended workflow is to subscribe to TFColorsLookupTexChange event
-        ///     to receive new color lookup textures and request textures updates by calling this function.
-        /// </remarks>
-        void TryUpdateColorLookupTexture();
+        public abstract void Serialize();
+
 
         /// <summary>
-        ///     Invoked whenever the underlying 1D transfer function texture has changed.
+        ///     Deserializes the transfer function data from a provided JSON filename.
         /// </summary>
         /// 
-        /// <remarks>
-        ///     Intended workflow is to subscribe to this event to receive TF textures and to call
-        ///     <seealso cref="TryUpdateColorLookupTexture">TryUpdateColorLookupTexture</seealso>
-        ///     to request an update for the TF texture.
-        /// </remarks>
-        event Action<Texture2D> TFColorsLookupTexChange;
+        /// <param name="filename">
+        ///     Filename of the transfer function JSON data to deserialize.
+        /// </param>
+        public abstract void Deserialize(string filename);
     }
 }

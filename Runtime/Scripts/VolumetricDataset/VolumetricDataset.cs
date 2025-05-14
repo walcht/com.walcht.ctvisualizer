@@ -82,13 +82,12 @@ namespace UnityCTVisualizer
             set
             {
                 m_CurrentTF = value;
-                ITransferFunction tf_so;
-                if (!m_TransferFunctions.TryGetValue(value, out tf_so))
+                if (!m_TransferFunctions.TryGetValue(value, out ITransferFunction tf))
                 {
-                    tf_so = TransferFunctionFactory.Create(value);
-                    m_TransferFunctions.Add(m_CurrentTF, tf_so);
+                    tf = TransferFunctionFactory.Create(value);
+                    m_TransferFunctions.Add(m_CurrentTF, tf);
                 }
-                VisualizationParametersEvents.ModelTFChange?.Invoke(m_CurrentTF, tf_so);
+                VisualizationParametersEvents.ModelTFChange?.Invoke(m_CurrentTF, tf);
             }
         }
 

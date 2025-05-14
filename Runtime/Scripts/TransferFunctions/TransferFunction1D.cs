@@ -1,40 +1,49 @@
-using System;
 using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
+using Newtonsoft.Json;
+using System;
+using System.Linq;
 
 namespace UnityCTVisualizer
 {
-    public static class TFConstants
-    {
-        public const int MAX_COLOR_CONTROL_POINTS = 16;
-        public const int MAX_ALPHA_CONTROL_POINTS = 16;
-    }
-
-    [CreateAssetMenu(
-        fileName = "transfer_function_1d",
-        menuName = "UnityCTVisualizer/TransferFunction1D"
-    )]
-    public class TransferFunction1D
-        : ScriptableObject,
-            ITransferFunction,
-            ISerializationCallbackReceiver
+    public class TransferFunction1D : ITransferFunction
     {
 
-        public event Action<Texture2D> TFColorsLookupTexChange;
+        public static readonly int MAX_COLOR_CONTROL_POINTS = 32;
+        public static readonly int MAX_ALPHA_CONTROL_POINTS = 32;
 
-        Dictionary<int, ControlPoint<float, Color>> m_ColorControls = new();
-        Dictionary<int, ControlPoint<float, float>> m_AlphaControls = new();
-        int m_color_control_points_id_accum = 0;
-        int m_alpha_control_points_id_accum = 0;
+        private readonly Dictionary<int, ControlPoint<float, Color>> m_ColorControls = new(MAX_COLOR_CONTROL_POINTS);
+        private readonly Dictionary<int, ControlPoint<float, float>> m_AlphaControls = new(MAX_ALPHA_CONTROL_POINTS);
+        private readonly List<ControlPoint<float, Color>> m_SortedColors = new(MAX_COLOR_CONTROL_POINTS);
+        private readonly List<ControlPoint<float, float>> m_SortedAlphas = new(MAX_ALPHA_CONTROL_POINTS);
 
-        bool m_dirty = true;
+        private int m_color_control_points_id_accum = 0;
+        private int m_alpha_control_points_id_accum = 0;
 
-        public void Init()
+        internal class TransferFunctionData
         {
+            // public int TextureWidth;
+            // public int TextureHeight;
+            public float[] ColorControlPositions;
+            public float[] AlphaControlPositions;
+            public float[][] ColorControlValues;
+            public float[] AlphaControlValues;
+        }
+
+
+        public TransferFunction1D() : base(256, 1)
+        {
+            TransferFunctionEvents.ViewTF1DColorControlAddition += OnViewTF1DColorControlAddition;
+            TransferFunctionEvents.ViewTF1DColorControlRemoval += OnViewTF1DColorControlRemoval;
+            TransferFunctionEvents.ViewTF1DAlphaControlAddition += OnViewTF1DAlphaControlAddition;
+            TransferFunctionEvents.ViewTF1DAlphaControlRemoval += OnViewTF1DAlphaControlRemoval;
+
             // default color control points - default ramp function
             AddColorControlPoint(new(0.0f, Color.black));
             AddColorControlPoint(new(0.20f, Color.red));
             AddColorControlPoint(new(1.00f, Color.white));
+
             // default alpha control points - default ramp function
             AddAlphaControlPoint(new(0.0f, 0.0f));
             AddAlphaControlPoint(new(0.20f, 0.0f));
@@ -42,49 +51,55 @@ namespace UnityCTVisualizer
             AddAlphaControlPoint(new(1.00f, 0.9f));
         }
 
-        /////////////////////////////////////////////////////////////////////////////////////////////////////
-        ////////////////////////////////////////////// GETTERS //////////////////////////////////////////////
-        /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        public IEnumerable<int> ColorControlPointIDs()
+        ~TransferFunction1D()
         {
-            return m_ColorControls.Keys;
+            TransferFunctionEvents.ViewTF1DColorControlAddition -= OnViewTF1DColorControlAddition;
+            TransferFunctionEvents.ViewTF1DColorControlRemoval -= OnViewTF1DColorControlRemoval;
+            TransferFunctionEvents.ViewTF1DAlphaControlAddition -= OnViewTF1DAlphaControlAddition;
+            TransferFunctionEvents.ViewTF1DAlphaControlRemoval -= OnViewTF1DAlphaControlRemoval;
         }
 
-        public IEnumerable<int> AlphaControlPointIDs()
-        {
-            return m_AlphaControls.Keys;
-        }
+
+        ///////////////////////////////////////////////////////////////////////
+        /// GETTERS
+        ///////////////////////////////////////////////////////////////////////
+
+        public IEnumerable<int> GetColorControlPointIDs() => m_ColorControls.Keys;
+
+        public IEnumerable<int> GetAlphaControlPointIDs() => m_AlphaControls.Keys;
+
 
         /// <summary>
-        /// Gets the color control point by its unique ID.
+        ///     Gets the color control point by its unique ID.
         /// </summary>
-        /// <param name="cpID">unique ID of the color control point.</param>
-        /// <returns>color control point</returns>
-        public ControlPoint<float, Color> GetColorControlPointAt(int cpID) => m_ColorControls[cpID];
+        /// 
+        /// <param name="cpID">
+        ///     unique ID of the color control point.
+        /// </param>
+        /// 
+        /// <returns>
+        ///     color control point
+        /// </returns>
+        public bool TryGetColorControlPoint(int cpID, out ControlPoint<float, Color> cp) => m_ColorControls.TryGetValue(cpID, out cp);
 
         /// <summary>
-        /// Gets the alpha control point by its unique ID.
+        ///     Gets the alpha control point by its unique ID.
         /// </summary>
-        /// <param name="cpID">unique ID of the alpha control point.</param>
-        /// <returns>alpha control point</returns>
-        public ControlPoint<float, float> GetAlphaControlPointAt(int cpID) => m_AlphaControls[cpID];
+        /// 
+        /// <param name="cpID">
+        ///     unique ID of the alpha control point.
+        /// </param>
+        /// 
+        /// <returns>
+        ///     alpha control point
+        /// </returns>
+        public bool TryGetAlphaControlPoint(int cpID, out ControlPoint<float, float> cp) => m_AlphaControls.TryGetValue(cpID, out cp);
 
-        /////////////////////////////////////////////////////////////////////////////////////////////////////
-        ///////////////////////////////////////////// MODIFIERS /////////////////////////////////////////////
-        /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        public void UpdateColorControlPointValueAt(int cpIndex, Color newColor)
-        {
-            // dirty flag will be set in OnValueChange callback
-            m_ColorControls[cpIndex].Value = newColor;
-        }
-
-        public void UpdateColorControlPointPositionAt(int cpIndex, float newPos)
-        {
-            // dirty flag will be set in OnValueChange callback
-            m_ColorControls[cpIndex].Position = newPos;
-        }
+        ///////////////////////////////////////////////////////////////////////
+        /// MODIFIERS
+        ///////////////////////////////////////////////////////////////////////
 
         /// <summary>
         ///     Add a new color control point from which intermediate colors (no alpha) are interpolated.
@@ -100,14 +115,12 @@ namespace UnityCTVisualizer
         /// <returns>
         ///     unique ID of the newly added color control point. Useful for identification purposes.
         /// </returns>
-        public int AddColorControlPoint(ControlPoint<float, Color> color_cp)
+        private int AddColorControlPoint(ControlPoint<float, Color> color_cp)
         {
-            color_cp.OnValueChange += () =>
-            {
-                m_dirty = true;
-            };
+            color_cp.OnValueChange += () => m_Dirty = true;
             m_ColorControls.Add(m_color_control_points_id_accum, color_cp);
-            m_dirty = true;
+            TransferFunctionEvents.ModelTF1DColorControlAddition?.Invoke(m_color_control_points_id_accum, color_cp);
+            m_Dirty = true;
             return m_color_control_points_id_accum++;
         }
 
@@ -127,14 +140,12 @@ namespace UnityCTVisualizer
         /// <returns>
         ///     unique ID of the newly added alpha control point. Useful for identification purposes.
         /// </returns>
-        public int AddAlphaControlPoint(ControlPoint<float, float> alpha_cp)
+        private int AddAlphaControlPoint(ControlPoint<float, float> alpha_cp)
         {
-            alpha_cp.OnValueChange += () =>
-            {
-                m_dirty = true;
-            };
+            alpha_cp.OnValueChange += () => m_Dirty = true;
             m_AlphaControls.Add(m_alpha_control_points_id_accum, alpha_cp);
-            m_dirty = true;
+            TransferFunctionEvents.ModelTF1DAlphaControlAddition?.Invoke(m_alpha_control_points_id_accum, alpha_cp);
+            m_Dirty = true;
             return m_alpha_control_points_id_accum++;
         }
 
@@ -145,11 +156,18 @@ namespace UnityCTVisualizer
         /// <param name="cp_id">
         ///     unique ID of the color control point to be removed
         /// </param>
-        public void RemoveColorControlPoint(int cp_id)
+        private void RemoveColorControlPoint(int cp_id, bool createDefaultIfEmpty = true)
         {
+            TransferFunctionEvents.ModelTF1DColorControlRemoval?.Invoke(cp_id);
             m_ColorControls.Remove(cp_id);
-            m_dirty = true;
-            return;
+
+            // we want to leave at lease one default color control point
+            if (createDefaultIfEmpty && m_ColorControls.Count == 0)
+            {
+                AddColorControlPoint(new(0.5f, Color.white));
+            }
+
+            m_Dirty = true;
         }
 
         /// <summary>
@@ -159,69 +177,57 @@ namespace UnityCTVisualizer
         /// <param name="cpID">
         ///     unique ID of the alpha control point to be remove
         /// </param>
-        public void RemoveAlphaControlPoint(int cpID)
+        private void RemoveAlphaControlPoint(int cpID, bool createDefaultIfEmpty = true)
         {
+            TransferFunctionEvents.ModelTF1DAlphaControlRemoval?.Invoke(cpID);
             m_AlphaControls.Remove(cpID);
-            m_dirty = true;
-            return;
+
+            // we want to leave at least one default alpha control point
+            if (createDefaultIfEmpty && m_AlphaControls.Count == 0)
+            {
+                AddAlphaControlPoint(new(0.5f, 0.2f));
+            }
+
+            m_Dirty = true;
         }
+
 
         /// <summary>
         ///     Removes all color control points. Since at least one color control point is needed for TF texture
         ///     generation, a white color control point is added at position 0.5.
         /// </summary>
-        public void ClearColorControlPoints()
+        private void ClearColorControlPoints(bool createDefaultCp = true)
         {
-            m_ColorControls.Clear();
-            m_dirty = true;
-            AddColorControlPoint(new(0.5f, Color.white));
+            var keys = m_ColorControls.Keys.ToList();
+            foreach (int k in keys)
+            {
+                RemoveColorControlPoint(k, createDefaultIfEmpty: createDefaultCp);
+            }
+
+            // just to be sure
+            m_Dirty = true;
         }
+
 
         /// <summary>
         ///     Removes all alpha control points. Since at least one alpha control point is needed for TF texture
         ///     generation, an alpha control point of 0.2 is added at position 0.5.
         /// </summary>
-        public void ClearAlphaControlPoints()
+        private void ClearAlphaControlPoints(bool createDefaultCp = true)
         {
-            m_AlphaControls.Clear();
-            m_dirty = true;
-            AddAlphaControlPoint(new(0.5f, 0.2f));
-        }
-
-        Texture2D m_ColorLookupTexture = null;
-
-        public void ForceUpdateColorLookupTexture()
-        {
-            GenerateColorLookupTextureInternal();
-            m_dirty = false;
-            TFColorsLookupTexChange?.Invoke(m_ColorLookupTexture);
-        }
-
-        public void TryUpdateColorLookupTexture()
-        {
-            if (m_ColorLookupTexture == null || m_dirty)
+            var keys = m_AlphaControls.Keys.ToList();
+            foreach (int k in keys)
             {
-                GenerateColorLookupTextureInternal();
-                m_dirty = false;
-                TFColorsLookupTexChange?.Invoke(m_ColorLookupTexture);
-                return;
+                RemoveAlphaControlPoint(k, createDefaultIfEmpty: createDefaultCp);
             }
+
+            // just to be sure
+            m_Dirty = true;
         }
 
-        private void GenerateColorLookupTextureInternal()
-        {
-            // 2D texture setup
-            const int textureWidth = 512;
-            const int textureHeight = 1;
 
-            if (m_ColorLookupTexture == null)
-            {
-                TextureFormat texFormat = SystemInfo.SupportsTextureFormat(TextureFormat.RGBAHalf)
-                    ? TextureFormat.RGBAHalf
-                    : TextureFormat.RGBAFloat;
-                m_ColorLookupTexture = new Texture2D(textureWidth, textureHeight, texFormat, false);
-                m_ColorLookupTexture.wrapMode = TextureWrapMode.Clamp;
-            }
+        protected override void GenerateColorLookupTexData()
+        {
             if (m_ColorControls.Count == 0)
             {
                 Debug.LogError("Color control points array is empty. Aborted TF generation.");
@@ -233,51 +239,58 @@ namespace UnityCTVisualizer
                 return;
             }
 
-            List<ControlPoint<float, Color>> sortedColors = new(m_ColorControls.Values);
-            List<ControlPoint<float, float>> sortedAlphas = new(m_AlphaControls.Values);
-            sortedColors.Sort((x, y) => x.Position.CompareTo(y.Position));
-            sortedAlphas.Sort((x, y) => x.Position.CompareTo(y.Position));
+            m_SortedColors.Clear();
+            m_SortedAlphas.Clear();
+
+            m_SortedColors.AddRange(m_ColorControls.Values);
+            m_SortedAlphas.AddRange(m_AlphaControls.Values);
+
+            m_SortedColors.Sort((x, y) => x.Position.CompareTo(y.Position));
+            m_SortedAlphas.Sort((x, y) => x.Position.CompareTo(y.Position));
 
             // add same color as first color at position 0 if no color is set at that position
-            if (sortedColors[0].Position > 0)
+            if (m_SortedColors[0].Position > 0)
             {
-                var tmp = sortedColors[0].Value;
-                sortedColors.Insert(0, new(0, tmp));
-            }
-            // add same color as last color at position 1 if no color is set at that position
-            if (sortedColors[sortedColors.Count - 1].Position < 1)
-            {
-                var tmp = sortedColors[sortedColors.Count - 1].Value;
-                sortedColors.Add(new(1, tmp));
-            }
-            // add same alpha as first alpha at position 0 if no alpha is set at that position
-            if (sortedAlphas[0].Position > 0)
-            {
-                var tmp = sortedAlphas[0].Value;
-                sortedAlphas.Insert(0, new(0, tmp));
-            }
-            // add same alpha as last alpha at position 1 if no alpha is set at that position
-            if (sortedAlphas[sortedAlphas.Count - 1].Position < 1)
-            {
-                var tmp = sortedAlphas[sortedAlphas.Count - 1].Value;
-                sortedAlphas.Add(new(1, tmp));
+                var tmp = m_SortedColors[0].Value;
+                m_SortedColors.Insert(0, new(0, tmp));
             }
 
-            Color[] pixelColorData = new Color[textureWidth * textureHeight];
+            // add same color as last color at position 1 if no color is set at that position
+            if (m_SortedColors[^1].Position < 1)
+            {
+                var tmp = m_SortedColors[^1].Value;
+                m_SortedColors.Add(new(1, tmp));
+            }
+
+            // add same alpha as first alpha at position 0 if no alpha is set at that position
+            if (m_SortedAlphas[0].Position > 0)
+            {
+                var tmp = m_SortedAlphas[0].Value;
+                m_SortedAlphas.Insert(0, new(0, tmp));
+            }
+
+            // add same alpha as last alpha at position 1 if no alpha is set at that position
+            if (m_SortedAlphas[^1].Position < 1)
+            {
+                var tmp = m_SortedAlphas[^1].Value;
+                m_SortedAlphas.Add(new(1, tmp));
+            }
+
             int leftColorControlIndex = 0;
             int leftAlphaControlIndex = 0;
-            int numOfColors = sortedColors.Count;
-            int numOfAlphas = sortedAlphas.Count;
 
-            // map texture width index to the range [0.0, 1.0]
-            for (int textureIndex = 0; textureIndex < textureWidth; textureIndex++)
+            int numOfColors = m_SortedColors.Count;
+            int numOfAlphas = m_SortedAlphas.Count;
+
+            for (int i = 0; i < m_RawTexData.Length; i += 4)
             {
-                float currentDensity = textureIndex / (float)(textureWidth - 1);
+                // map [0, tex.width] to [0.0, 1.0]
+                float density = (i / 4) / (float)(m_ColorLookupTex.width - 1);
 
                 // find nearest left color control point to density
                 while (
                     leftColorControlIndex < numOfColors - 2
-                    && sortedColors[leftColorControlIndex + 1].Position < currentDensity
+                    && m_SortedColors[leftColorControlIndex + 1].Position < density
                 )
                 {
                     leftColorControlIndex++;
@@ -286,23 +299,19 @@ namespace UnityCTVisualizer
                 // find nearest left alpha control point to density
                 while (
                     leftAlphaControlIndex < numOfAlphas - 2
-                    && sortedAlphas[leftAlphaControlIndex + 1].Position < currentDensity
+                    && m_SortedAlphas[leftAlphaControlIndex + 1].Position < density
                 )
                 {
                     leftAlphaControlIndex++;
                 }
 
-                var leftColor = sortedColors[leftColorControlIndex];
-                var rightColor = sortedColors[leftColorControlIndex + 1];
-                var leftAlpha = sortedAlphas[leftAlphaControlIndex];
-                var rightAlpha = sortedAlphas[leftAlphaControlIndex + 1];
+                var leftColor = m_SortedColors[leftColorControlIndex];
+                var rightColor = m_SortedColors[leftColorControlIndex + 1];
+                var leftAlpha = m_SortedAlphas[leftAlphaControlIndex];
+                var rightAlpha = m_SortedAlphas[leftAlphaControlIndex + 1];
 
-                float tColor =
-                    (currentDensity - leftColor.Position)
-                    / (rightColor.Position - leftColor.Position);
-                float tAlpha =
-                    (currentDensity - leftAlpha.Position)
-                    / (rightAlpha.Position - leftAlpha.Position);
+                float tColor = (density - leftColor.Position) / (rightColor.Position - leftColor.Position);
+                float tAlpha = (density - leftAlpha.Position) / (rightAlpha.Position - leftAlpha.Position);
 
                 // color (without alpha) linear interpolation
                 Color pixelColor = Color.Lerp(leftColor.Value, rightColor.Value, tColor);
@@ -310,28 +319,116 @@ namespace UnityCTVisualizer
                 // alpha linear interpolation
                 pixelColor.a = Mathf.Lerp(leftAlpha.Value, rightAlpha.Value, tAlpha);
 
-                pixelColorData[textureIndex] =
-                    QualitySettings.activeColorSpace == ColorSpace.Linear
-                        ? pixelColor.linear
-                        : pixelColor;
+                if (QualitySettings.activeColorSpace == ColorSpace.Linear)
+                {
+                    Color c = pixelColor.linear;
+                    m_RawTexData[i] = (byte)(c.r * 255);
+                    m_RawTexData[i + 1] = (byte)(c.g * 255);
+                    m_RawTexData[i + 2] = (byte)(c.b * 255);
+                    m_RawTexData[i + 3] = (byte)(c.a * 255);
+                }
+                else
+                {
+                    m_RawTexData[i] = (byte)(pixelColor.r * 255);
+                    m_RawTexData[i + 1] = (byte)(pixelColor.g * 255);
+                    m_RawTexData[i + 2] = (byte)(pixelColor.b * 255);
+                    m_RawTexData[i + 3] = (byte)(pixelColor.a * 255);
+                }
             }
-            m_ColorLookupTexture.SetPixels(pixelColorData);
-            m_ColorLookupTexture.Apply();
         }
 
-        public void OnBeforeSerialize() { }
 
-        public void OnAfterDeserialize()
+        public override void Serialize()
         {
-            foreach (var item in m_ColorControls.Values)
+            string fp = Path.Combine(Application.persistentDataPath, $"tf1d_{0}.json");
+
+            if (File.Exists(fp))
             {
-                item.OnValueChange += () => m_dirty = true;
+                throw new Exception($"{Path.GetFileName(fp)} already exists in {Path.GetDirectoryName(fp)}");
             }
 
-            foreach (var item in m_AlphaControls.Values)
+            int[] colorControlIDs = new int[m_ColorControls.Count];
+            float[] colorControlPositions = new float[m_ColorControls.Count];
+            float[][] colorControlValues = new float[m_ColorControls.Count][];
+            int i = 0;
+            foreach (var cp in m_ColorControls)
             {
-                item.OnValueChange += () => m_dirty = true;
+                colorControlIDs[i] = cp.Key;
+                colorControlPositions[i] = cp.Value.Position;
+                colorControlValues[i] = new float[] {cp.Value.Value.r, cp.Value.Value.g, cp.Value.Value.b,
+                    cp.Value.Value.a };
+                ++i;
             }
+
+            int[] alphaControlIDs = new int[m_AlphaControls.Count];
+            float[] alphaControlPositions = new float[m_AlphaControls.Count];
+            float[] alphaControlValues = new float[m_AlphaControls.Count];
+            i = 0;
+            foreach (var cp in m_AlphaControls)
+            {
+                alphaControlIDs[i] = cp.Key;
+                alphaControlPositions[i] = cp.Value.Position;
+                alphaControlValues[i] = cp.Value.Value;
+                ++i;
+            }
+
+            var data = new TransferFunctionData()
+            {
+                ColorControlPositions = colorControlPositions,
+                AlphaControlPositions = alphaControlPositions,
+                ColorControlValues = colorControlValues,
+                AlphaControlValues = alphaControlValues,
+            };
+
+            using (StreamWriter sw = File.CreateText(fp))
+            {
+                sw.Write(JsonConvert.SerializeObject(data));
+            }
+
+            Debug.Log($"transfer function data successfully serialized at: {fp}");
         }
+
+
+        public override void Deserialize(string filename)
+        {
+            string fp = Path.Combine(Application.persistentDataPath, $"tf1d_0.json");
+
+            // clear previous control points
+            ClearColorControlPoints(createDefaultCp: false);
+            ClearAlphaControlPoints(createDefaultCp: false);
+
+            m_color_control_points_id_accum = 0;
+            m_alpha_control_points_id_accum = 0;
+
+            var data = JsonConvert.DeserializeObject<TransferFunctionData>(File.ReadAllText(fp));
+            for (int i = 0; i < data.ColorControlPositions.Length; ++i)
+            {
+                var col = new Color(data.ColorControlValues[i][0], data.ColorControlValues[i][1],
+                    data.ColorControlValues[i][2], data.ColorControlValues[i][3]);
+                AddColorControlPoint(new ControlPoint<float, Color>(data.ColorControlPositions[i], col));
+            }
+
+            for (int i = 0; i < data.AlphaControlPositions.Length; ++i)
+            {
+                AddAlphaControlPoint(new ControlPoint<float, float>(data.AlphaControlPositions[i],
+                    data.AlphaControlValues[i]));
+            }
+
+            m_Dirty = true;
+        }
+
+
+        private void OnViewTF1DColorControlAddition(ControlPoint<float, Color> cp) => AddColorControlPoint(cp);
+
+
+        private void OnViewTF1DColorControlRemoval(int cpID) => RemoveColorControlPoint(cpID);
+
+
+        private void OnViewTF1DAlphaControlAddition(ControlPoint<float, float> cp) => AddAlphaControlPoint(cp);
+
+
+        private void OnViewTF1DAlphaControlRemoval(int cpID) => RemoveAlphaControlPoint(cpID);
+
     }
+
 }
