@@ -33,7 +33,7 @@ namespace UnityCTVisualizer
         /// Invoked by Models (SOs)
         ////////////////////////////////
         public static Action<TF, ITransferFunction> ModelTFChange;
-        public static Action<float> ModelAlphaCutoffChange;
+        public static Action<float> ModelOpacityCutoffChange;
         public static Action<INTERPOLATION> ModelInterpolationChange;
         public static Action<float> ModelSamplingQualityFactorChange;
         public static Action<float> ModelLODQualityFactorChange;

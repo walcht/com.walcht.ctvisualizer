@@ -50,6 +50,22 @@ namespace UnityCTVisualizer
             }
 
             m_PerspectiveToggle.isOn = !Camera.main.orthographic;
+
+            m_OpacityCutoffSlider.minValue = 0.0f;
+            m_OpacityCutoffSlider.maxValue = 1.0f;
+            m_OpacityCutoffInputField.readOnly = false;
+            m_OpacityCutoffInputField.contentType = TMP_InputField.ContentType.DecimalNumber;
+
+
+            m_SamplingQualityFactorSlider.minValue = 0.5f;
+            m_SamplingQualityFactorSlider.maxValue = 3.0f;
+            m_SamplingQualityFactorInputField.readOnly = false;
+            m_SamplingQualityFactorInputField.contentType = TMP_InputField.ContentType.DecimalNumber;
+
+            m_LODQualityFactorSlider.minValue = 0.10f;
+            m_LODQualityFactorSlider.maxValue = 5.00f;
+            m_LODQualityFactorInputField.readOnly = false;
+            m_LODQualityFactorInputField.contentType = TMP_InputField.ContentType.DecimalNumber;
         }
 
         private void OnEnable()
@@ -60,12 +76,15 @@ namespace UnityCTVisualizer
             m_PerspectiveToggle.interactable = false;
 #endif
             m_InterpolationDropDown.onValueChanged.AddListener(OnInterDropDownChange);
-            m_OpacityCutoffSlider.onValueChanged.AddListener(OnOpacityCutoffSliderChange);
-            m_SamplingQualityFactorSlider.onValueChanged.AddListener(OnSamplingQualityFactorSliderChange);
-            m_LODQualityFactorSlider.onValueChanged.AddListener(OnLODQualityFactorSliderChange);
+            m_OpacityCutoffSlider.onValueChanged.AddListener(OnOpacityCutoffInput);
+            m_OpacityCutoffInputField.onSubmit.AddListener(OnOpacityCutoffInput);
+            m_SamplingQualityFactorSlider.onValueChanged.AddListener(OnSamplingQualityFactorInput);
+            m_SamplingQualityFactorInputField.onSubmit.AddListener(OnSamplingQualityFactorInput);
+            m_LODQualityFactorSlider.onValueChanged.AddListener(OnLODQualityFactorInput);
+            m_LODQualityFactorInputField.onSubmit.AddListener(OnLODQualityFactorInput);
 
             VisualizationParametersEvents.ModelTFChange += OnModelTFChange;
-            VisualizationParametersEvents.ModelAlphaCutoffChange += OnModelAlphaCutoffChange;
+            VisualizationParametersEvents.ModelOpacityCutoffChange += OnModelOpacityCutoffChange;
             VisualizationParametersEvents.ModelSamplingQualityFactorChange += OnModelSamplingQualityFactorChange;
             VisualizationParametersEvents.ModelLODQualityFactorChange += OnModelLODQualityFactorChange;
             VisualizationParametersEvents.ModelInterpolationChange += OnModelInterpolationChange;
@@ -78,11 +97,14 @@ namespace UnityCTVisualizer
 #endif
             m_InterpolationDropDown.onValueChanged.RemoveAllListeners();
             m_OpacityCutoffSlider.onValueChanged.RemoveAllListeners();
+            m_OpacityCutoffInputField.onSubmit.RemoveAllListeners();
             m_SamplingQualityFactorSlider.onValueChanged.RemoveAllListeners();
+            m_SamplingQualityFactorInputField.onSubmit.RemoveAllListeners();
             m_LODQualityFactorSlider.onValueChanged.RemoveAllListeners();
+            m_LODQualityFactorInputField.onSubmit.RemoveAllListeners();
 
             VisualizationParametersEvents.ModelTFChange -= OnModelTFChange;
-            VisualizationParametersEvents.ModelAlphaCutoffChange -= OnModelAlphaCutoffChange;
+            VisualizationParametersEvents.ModelOpacityCutoffChange -= OnModelOpacityCutoffChange;
             VisualizationParametersEvents.ModelSamplingQualityFactorChange -= OnModelSamplingQualityFactorChange;
             VisualizationParametersEvents.ModelLODQualityFactorChange -= OnModelLODQualityFactorChange;
             VisualizationParametersEvents.ModelInterpolationChange -= OnModelInterpolationChange;
@@ -113,23 +135,23 @@ namespace UnityCTVisualizer
             }
         }
 
-        private void OnOpacityCutoffSliderChange(float val)
-        {
-            VisualizationParametersEvents.ViewAlphaCutoffChange?.Invoke(val);
-            m_OpacityCutoffInputField.text = val.ToString("0.00");
-        }
 
-        private void OnSamplingQualityFactorSliderChange(float val)
-        {
-            VisualizationParametersEvents.ViewSamplingQualityFactorChange?.Invoke(val);
-            m_SamplingQualityFactorInputField.text = val.ToString("0.00");
-        }
+        private void OnOpacityCutoffInput(float val) => VisualizationParametersEvents.ViewAlphaCutoffChange?.Invoke(val);
 
-        private void OnLODQualityFactorSliderChange(float val)
-        {
-            VisualizationParametersEvents.ViewLODQualityFactorChange?.Invoke(val);
-            m_LODQualityFactorInputField.text = val.ToString("0.00");
-        }
+
+        private void OnOpacityCutoffInput(string val) => VisualizationParametersEvents.ViewAlphaCutoffChange?.Invoke(float.Parse(val));
+
+
+        private void OnSamplingQualityFactorInput(float val) => VisualizationParametersEvents.ViewSamplingQualityFactorChange?.Invoke(val);
+
+
+        private void OnSamplingQualityFactorInput(string val) => VisualizationParametersEvents.ViewSamplingQualityFactorChange?.Invoke(float.Parse(val));
+
+
+        private void OnLODQualityFactorInput(float val) => VisualizationParametersEvents.ViewLODQualityFactorChange?.Invoke(val);
+
+
+        private void OnLODQualityFactorInput(string val) => VisualizationParametersEvents.ViewLODQualityFactorChange?.Invoke(float.Parse(val));
 
 
         /////////////////////////////////
@@ -140,24 +162,24 @@ namespace UnityCTVisualizer
         private void OnModelTFChange(TF new_tf, ITransferFunction _) => m_TFDropDown.SetValueWithoutNotify((int)new_tf);
 
 
-        private void OnModelAlphaCutoffChange(float value)
+        private void OnModelOpacityCutoffChange(float value)
         {
             m_OpacityCutoffSlider.SetValueWithoutNotify(value);
-            m_OpacityCutoffInputField.text = value.ToString("0.00");
+            m_OpacityCutoffInputField.SetTextWithoutNotify(value.ToString("0.00"));
         }
 
 
         private void OnModelSamplingQualityFactorChange(float value)
         {
             m_SamplingQualityFactorSlider.SetValueWithoutNotify(value);
-            m_SamplingQualityFactorInputField.text = value.ToString("0.00");
+            m_SamplingQualityFactorInputField.SetTextWithoutNotify(value.ToString("0.00"));
         }
 
 
         private void OnModelLODQualityFactorChange(float value)
         {
             m_LODQualityFactorSlider.SetValueWithoutNotify(value);
-            m_LODQualityFactorInputField.text = value.ToString("0.00");
+            m_LODQualityFactorInputField.SetTextWithoutNotify(value.ToString("0.00"));
         }
 
         private void OnModelInterpolationChange(INTERPOLATION value) => m_InterpolationDropDown.SetValueWithoutNotify((int)value);

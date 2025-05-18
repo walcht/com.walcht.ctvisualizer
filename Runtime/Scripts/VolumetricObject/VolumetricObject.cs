@@ -758,7 +758,7 @@ namespace UnityCTVisualizer
         private void OnEnable()
         {
             VisualizationParametersEvents.ModelTFChange += OnModelTFChange;
-            VisualizationParametersEvents.ModelAlphaCutoffChange += OnModelAlphaCutoffChange;
+            VisualizationParametersEvents.ModelOpacityCutoffChange += OnModelAlphaCutoffChange;
             VisualizationParametersEvents.ModelSamplingQualityFactorChange += OnModelSamplingQualityFactorChange;
             VisualizationParametersEvents.ModelLODQualityFactorChange += OnModelLODQualityFactorChange;
             VisualizationParametersEvents.ModelInterpolationChange += OnModelInterpolationChange;
@@ -767,7 +767,7 @@ namespace UnityCTVisualizer
         private void OnDisable()
         {
             VisualizationParametersEvents.ModelTFChange -= OnModelTFChange;
-            VisualizationParametersEvents.ModelAlphaCutoffChange -= OnModelAlphaCutoffChange;
+            VisualizationParametersEvents.ModelOpacityCutoffChange -= OnModelAlphaCutoffChange;
             VisualizationParametersEvents.ModelSamplingQualityFactorChange -= OnModelSamplingQualityFactorChange;
             VisualizationParametersEvents.ModelLODQualityFactorChange -= OnModelLODQualityFactorChange;
             VisualizationParametersEvents.ModelInterpolationChange -= OnModelInterpolationChange;

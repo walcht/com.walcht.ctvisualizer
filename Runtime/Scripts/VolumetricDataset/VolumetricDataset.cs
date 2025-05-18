@@ -35,12 +35,12 @@ namespace UnityCTVisualizer
         // VISUALIZATION PARAMETERS
         /////////////////////////////////
         private float m_AlphaCutoff = 254.0f / 255.0f;
-        public float AlphaCutoff
+        public float OpacityCutoff
         {
             get => m_AlphaCutoff; set
             {
-                m_AlphaCutoff = value;
-                VisualizationParametersEvents.ModelAlphaCutoffChange?.Invoke(value);
+                m_AlphaCutoff = Mathf.Clamp01(value);
+                VisualizationParametersEvents.ModelOpacityCutoffChange?.Invoke(m_AlphaCutoff);
             }
         }
 
@@ -49,8 +49,8 @@ namespace UnityCTVisualizer
         {
             get => m_SamplingQualityFactor; set
             {
-                m_SamplingQualityFactor = value;
-                VisualizationParametersEvents.ModelSamplingQualityFactorChange?.Invoke(value);
+                m_SamplingQualityFactor = Mathf.Clamp(value, 0.5f, 3.0f);
+                VisualizationParametersEvents.ModelSamplingQualityFactorChange?.Invoke(m_SamplingQualityFactor);
             }
         }
 
@@ -60,18 +60,18 @@ namespace UnityCTVisualizer
             get => m_LODQualityFactor; set
             {
                 m_LODQualityFactor = Mathf.Clamp(value, 0.10f, 5.0f);
-                VisualizationParametersEvents.ModelLODQualityFactorChange?.Invoke(value);
+                VisualizationParametersEvents.ModelLODQualityFactorChange?.Invoke(m_LODQualityFactor);
             }
         }
 
 
         private INTERPOLATION m_Interpolation = INTERPOLATION.TRILLINEAR;
-        public INTERPOLATION InterpolationMethode
+        public INTERPOLATION InterpolationMethod
         {
             get => m_Interpolation; set
             {
                 m_Interpolation = value;
-                VisualizationParametersEvents.ModelInterpolationChange?.Invoke(value);
+                VisualizationParametersEvents.ModelInterpolationChange?.Invoke(m_Interpolation);
             }
         }
 
@@ -82,9 +82,9 @@ namespace UnityCTVisualizer
             set
             {
                 m_CurrentTF = value;
-                if (!m_TransferFunctions.TryGetValue(value, out ITransferFunction tf))
+                if (!m_TransferFunctions.TryGetValue(m_CurrentTF, out ITransferFunction tf))
                 {
-                    tf = TransferFunctionFactory.Create(value);
+                    tf = TransferFunctionFactory.Create(m_CurrentTF);
                     m_TransferFunctions.Add(m_CurrentTF, tf);
                 }
                 VisualizationParametersEvents.ModelTFChange?.Invoke(m_CurrentTF, tf);
@@ -94,9 +94,10 @@ namespace UnityCTVisualizer
         public void DispatchVisualizationParamsChangeEvents()
         {
             VisualizationParametersEvents.ModelTFChange?.Invoke(m_CurrentTF, m_TransferFunctions[m_CurrentTF]);
-            VisualizationParametersEvents.ModelAlphaCutoffChange?.Invoke(m_AlphaCutoff);
+            VisualizationParametersEvents.ModelOpacityCutoffChange?.Invoke(m_AlphaCutoff);
             VisualizationParametersEvents.ModelInterpolationChange?.Invoke(m_Interpolation);
             VisualizationParametersEvents.ModelSamplingQualityFactorChange?.Invoke(m_SamplingQualityFactor);
+            VisualizationParametersEvents.ModelLODQualityFactorChange?.Invoke(m_LODQualityFactor);
         }
 
         /////////////////////////////////
@@ -179,29 +180,18 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ViewInterpolationChange -= OnViewInterpolationChange;
         }
 
-        private void OnViewAlphaCutoffChange(float alphaCutoff)
-        {
-            AlphaCutoff = Mathf.Clamp01(alphaCutoff);
-        }
+        private void OnViewAlphaCutoffChange(float val) => OpacityCutoff = val;
 
-        private void OnViewSamplingQualityFactorChange(float val)
-        {
-            SamplingQualityFactor = val;
-        }
 
-        private void OnViewLODQualityFactorChange(float val)
-        {
-            LODQualityFactor = val;
-        }
+        private void OnViewSamplingQualityFactorChange(float val) => SamplingQualityFactor = val;
 
-        private void OnViewInterpolationChange(INTERPOLATION interpolation)
-        {
-            InterpolationMethode = interpolation;
-        }
 
-        private void OnViewTFChange(TF new_tf)
-        {
-            TransferFunction = new_tf;
-        }
+        private void OnViewLODQualityFactorChange(float val) => LODQualityFactor = val;
+
+
+        private void OnViewInterpolationChange(INTERPOLATION interpolation) => InterpolationMethod = interpolation;
+
+
+        private void OnViewTFChange(TF new_tf) => TransferFunction = new_tf;
     }
 }
