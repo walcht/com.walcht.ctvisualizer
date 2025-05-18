@@ -58,18 +58,19 @@ namespace UnityCTVisualizer
         private readonly int ALPHA_COUNT_SHADER_ID = Shader.PropertyToID("_AlphaCount");
         private readonly int ALPHA_POSITIONS_SHADER_ID = Shader.PropertyToID("_AlphaPositions");
         private readonly int ALPHA_VALUES_SHADER_ID = Shader.PropertyToID("_AlphaValues");
+        private readonly int SCALE_ID = Shader.PropertyToID("_Scale");
 
 
         ///////////////////////////////////////////////////////////////////////
         /// SCALES
         ///////////////////////////////////////////////////////////////////////
-        private IScaleContinuous<float, float> m_x_scale;
+        private IScaleContinuous<int, float> m_x_scale;
         private IScaleContinuous<float, float> m_y_scale;
 
         ///////////////////////////////////////////////////////////////////////
         /// AXES
         ///////////////////////////////////////////////////////////////////////
-        private Axis<float> m_x_axis;
+        private Axis<int> m_x_axis;
         private Axis<float> m_y_axis;
 
         ///////////////////////////////////////////////////////////////////////
@@ -106,6 +107,9 @@ namespace UnityCTVisualizer
         private readonly Dictionary<int, ColorControlPointUI> m_ColorControlPoints = new();
         private readonly Dictionary<int, AlphaControlPointUI> m_AlphaControlPoints = new();
 
+        private float m_PrevHistogramWidth = 0;
+        private float m_PrevHistogramHeight = 0;
+
 
         private void Awake()
         {
@@ -130,6 +134,14 @@ namespace UnityCTVisualizer
             {
                 GPUUpdateAlphaControlPoints();
                 m_DirtyAlphaCps = false;
+            }
+
+            if (m_HistogramTransform.rect.width != m_PrevHistogramWidth
+                || m_HistogramTransform.rect.height != m_PrevHistogramHeight)
+            {
+                OnHistogramDimsChange();
+                m_PrevHistogramWidth = m_HistogramTransform.rect.width;
+                m_PrevHistogramHeight = m_HistogramTransform.rect.height;
             }
 
             // TODO: probably someone else should take the responsibility of updating the color lookup texture.
@@ -196,7 +208,7 @@ namespace UnityCTVisualizer
             m_YScaleReferenceDomain = new(0.0f, 1.0f);
 
             // create the x/y scales and axes
-            m_x_scale = new ScaleLinearFloatFloat(0.0f, 1.0f, 0, m_XAxisContainer.rect.width);
+            m_x_scale = new ScaleLinearIntFloat(0, 255, 0, m_XAxisContainer.rect.width);
 
             // create/update Y scale
             m_y_scale = new ScaleLinearFloatFloat(m_YScaleReferenceDomain.x, m_YScaleReferenceDomain.y, 0, m_YAxisContainer.rect.height);
@@ -204,7 +216,7 @@ namespace UnityCTVisualizer
             m_y_scale.RangeChanged += OnScaleYDomainRangeChange;
             m_y_scale.DomainChanged += OnScaleYDomainRangeChange;
 
-            m_x_axis = new AxisTop<float>(m_x_scale)
+            m_x_axis = new AxisTop<int>(m_x_scale)
                 .SetAxisStrokeWidth(1.75f)
                 .SetAxisMaterial(AxisMaterial)
                 .SetTickCount(4)
@@ -231,7 +243,6 @@ namespace UnityCTVisualizer
                 .SetUseWorldSpace(false)
                 .SetAlignment(LineAlignment.TransformZ)
                 .Attach(m_YAxisContainer.gameObject);
-
         }
 
 
@@ -566,6 +577,8 @@ namespace UnityCTVisualizer
             foreach (var cp in m_ColorControlPoints)
                 cp.Value.Interactable = true;
 
+            m_AddColor.interactable = true;
+            m_AddAlpha.interactable = true;
             m_ClearAlphas.interactable = true;
             m_ClearColors.interactable = true;
             m_Save.interactable = true;
@@ -582,6 +595,8 @@ namespace UnityCTVisualizer
                 cp.Value.Interactable = false;
 
             m_RemoveSelection.interactable = false;
+            m_AddColor.interactable = false;
+            m_AddAlpha.interactable = false;
             m_ClearAlphas.interactable = false;
             m_ClearColors.interactable = false;
             m_ColorPicker.interactable = false;
@@ -722,6 +737,7 @@ namespace UnityCTVisualizer
             m_HistogramImage.material.SetInteger(ALPHA_COUNT_SHADER_ID, m_AlphaCps.Count);
             m_HistogramImage.material.SetFloatArray(ALPHA_POSITIONS_SHADER_ID, m_AlphaPositionsOrdered);
             m_HistogramImage.material.SetFloatArray(ALPHA_VALUES_SHADER_ID, m_AlphaValuesOrdered);
+            OnHistogramDimsChange();
         }
 
 
@@ -804,6 +820,14 @@ namespace UnityCTVisualizer
             m_y_scale.Domain(m_YScaleReferenceDomain.x * ky + ty, m_YScaleReferenceDomain.y * ky + ty);
 
             m_DirtyAlphaCps = true;
+        }
+
+
+        private void OnHistogramDimsChange()
+        {
+            float _min = Mathf.Min(m_HistogramTransform.rect.width, m_HistogramTransform.rect.height);
+            Vector4 d = new (m_HistogramTransform.rect.width / _min, m_HistogramTransform.rect.height / _min, 0, 0);
+            m_HistogramImage.material.SetVector(SCALE_ID, d);
         }
 
     }

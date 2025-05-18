@@ -2,10 +2,11 @@ Shader "UnityCTVisualizer/HistogramShader"
 {
     Properties
     {
-        _MainTex ("Densities frequency 1D-ish texture", 2D) = "green" {}
+        _MainTex ("Densities frequency 1D-ish texture", 2D) = "white" {}
         _BinColor("Bins color", Color) = (1.0, 1.0, 1.0, 1.0)
         _BackgroundColor("Background color", Color) = (0.0, 0.0, 0.0, 1.0)
         _PlotColor("Alpha plot color", Color) = (0.0, 1.0, 0.0, 1.0)
+        _LineWidth("Line width", float) = 0.05
     }
     SubShader
     {
@@ -24,16 +25,18 @@ Shader "UnityCTVisualizer/HistogramShader"
             
             sampler2D _MainTex;
             float4 _MainTex_ST;
+
             float4 _BinColor;
             float4 _BackgroundColor;
             float4 _PlotColor;
+
             int _AlphaCount = 0;
-            float _AlphaPositions[MAX_ALPHA_CONTROL_POINTS] ;
+            float _AlphaPositions[MAX_ALPHA_CONTROL_POINTS];
             float _AlphaValues[MAX_ALPHA_CONTROL_POINTS];
 
-            float plot(float y, float r) {
-                return  smoothstep(r - 0.02f, r, y) - smoothstep(r, r + 0.02f, y);
-            }
+            float _LineWidth = 0.05;
+
+            float4 _Scale;
 
             struct v2f
             {
@@ -49,20 +52,45 @@ Shader "UnityCTVisualizer/HistogramShader"
                 return o;
             }
 
-            fixed4 frag (v2f i) : SV_Target
+            fixed4 frag (v2f frag) : SV_Target
             {
-                // sample the frequency for current density
-                float freq = tex2Dlod(_MainTex, float4(i.uv.x, 0.0f, 0.0f, 0.0f)).r;
-                float t = step(freq, i.uv.y);
-                float4 col = t * _BackgroundColor + (1 - t) * _BinColor;
-                for (int j = 0; j < _AlphaCount - 1; ++j) {
-                    // TODO: optimize this loop
-                    if ( i.uv.x >= _AlphaPositions[j] &&  i.uv.x < _AlphaPositions[j+1]) {
-                        float p = plot(i.uv.y, lerp(_AlphaValues[j], _AlphaValues[j+1], (i.uv.x - _AlphaPositions[j]) / (_AlphaPositions[j+1] - _AlphaPositions[j])));
-                        col = p * _PlotColor + (1.0f - p) * col;
-                        break;
-                    }
+                // p is the current fragment position scaled so that line width remains constant
+                float2 p = frag.uv * _Scale.xy;
+
+                // determine closest distance (squared) to the segments defining the alpha curve
+                float closest = 99999.0;
+
+                [unroll(MAX_ALPHA_CONTROL_POINTS - 1)]
+                for (int i = 0; i < _AlphaCount - 1; ++i)
+                {
+                    // the current segment s is defined by the parametric equation: s = v + t * (w - v)
+                    float2 v = float2(_AlphaPositions[i], _AlphaValues[i]) * _Scale.xy;
+                    float2 w = float2(_AlphaPositions[i + 1], _AlphaValues[i + 1]) * _Scale.xy;
+                    float2 vw = w - v;
+
+                    // project current fragment into this segment
+                    float t = clamp(dot(p - v, vw) / dot(vw, vw), 0.0f, 1.0f);
+
+                    // projection point on the segment
+                    float2 proj = v + t * vw;
+
+                    // closest distance squared is the length of the projection vector squared
+                    closest = min(closest, dot(p - proj, p - proj));
                 }
+
+                // p is now unscaled
+                p = frag.uv;
+
+                // sample the frequency for current density
+                float freq = tex2Dlod(_MainTex, float4(p.x, 0., 0., 0.)).r;
+
+                float t0 = step(freq, p.y);
+                float4 col = t0 * _BackgroundColor + (1 - t0) * _BinColor;
+
+                float t1 = 1.0f - smoothstep(0.0f, _LineWidth, sqrt(closest));
+                
+                col = t1 * _PlotColor + (1.0f - t1) * col;
+
                 return col;
             }
             ENDCG

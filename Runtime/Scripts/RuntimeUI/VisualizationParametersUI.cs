@@ -9,7 +9,6 @@ namespace UnityCTVisualizer
     {
         NEAREST_NEIGHBOR = 0,
         TRILLINEAR,
-        // TRILINEAR_POST_CLASSIFICATION, - yields worse performance and worse visuals
     }
 
     public class VisualizationParametersUI : MonoBehaviour
@@ -18,10 +17,14 @@ namespace UnityCTVisualizer
         /////////////////////////////////
         // UI MODIFIERS
         /////////////////////////////////
+        [SerializeField] Toggle m_PerspectiveToggle;
         [SerializeField] TMP_Dropdown m_TFDropDown;
-        [SerializeField] Slider m_AlphaCutoffSlider;
+        [SerializeField] Slider m_OpacityCutoffSlider;
+        [SerializeField] TMP_InputField m_OpacityCutoffInputField;
         [SerializeField] Slider m_SamplingQualityFactorSlider;
+        [SerializeField] TMP_InputField m_SamplingQualityFactorInputField;
         [SerializeField] Slider m_LODQualityFactorSlider;
+        [SerializeField] TMP_InputField m_LODQualityFactorInputField;
         [SerializeField] TMP_Dropdown m_InterpolationDropDown;
 
         /////////////////////////////////
@@ -46,14 +49,21 @@ namespace UnityCTVisualizer
                 m_InterpolationDropDown.options.Add(new TMP_Dropdown.OptionData(enumName.Replace("_", " ").ToLower()));
             }
 
-            m_InterpolationDropDown.onValueChanged.AddListener(OnInterDropDownChange);
-            m_AlphaCutoffSlider.onValueChanged.AddListener(OnAlphaCutoffSliderChange);
-            m_SamplingQualityFactorSlider.onValueChanged.AddListener(OnSamplingQualityFactorSliderChange);
-            m_LODQualityFactorSlider.onValueChanged.AddListener(OnLODQualityFactorSliderChange);
+            m_PerspectiveToggle.isOn = !Camera.main.orthographic;
         }
 
         private void OnEnable()
         {
+#if !UNITY_ANDROID
+            m_PerspectiveToggle.onValueChanged.AddListener(OnPerspectiveToggleChange);
+#else
+            m_PerspectiveToggle.interactable = false;
+#endif
+            m_InterpolationDropDown.onValueChanged.AddListener(OnInterDropDownChange);
+            m_OpacityCutoffSlider.onValueChanged.AddListener(OnOpacityCutoffSliderChange);
+            m_SamplingQualityFactorSlider.onValueChanged.AddListener(OnSamplingQualityFactorSliderChange);
+            m_LODQualityFactorSlider.onValueChanged.AddListener(OnLODQualityFactorSliderChange);
+
             VisualizationParametersEvents.ModelTFChange += OnModelTFChange;
             VisualizationParametersEvents.ModelAlphaCutoffChange += OnModelAlphaCutoffChange;
             VisualizationParametersEvents.ModelSamplingQualityFactorChange += OnModelSamplingQualityFactorChange;
@@ -63,8 +73,11 @@ namespace UnityCTVisualizer
 
         private void OnDisable()
         {
+#if !UNITY_ANDROID
+            m_PerspectiveToggle.onValueChanged.RemoveAllListeners();
+#endif
             m_InterpolationDropDown.onValueChanged.RemoveAllListeners();
-            m_AlphaCutoffSlider.onValueChanged.RemoveAllListeners();
+            m_OpacityCutoffSlider.onValueChanged.RemoveAllListeners();
             m_SamplingQualityFactorSlider.onValueChanged.RemoveAllListeners();
             m_LODQualityFactorSlider.onValueChanged.RemoveAllListeners();
 
@@ -87,6 +100,10 @@ namespace UnityCTVisualizer
             }
         }
 
+
+        private void OnPerspectiveToggleChange(bool val) => Camera.main.orthographic = !val;
+
+
         private void OnInterDropDownChange(int interIndex)
         {
             if (interIndex != m_PrevInterIndex)
@@ -96,19 +113,22 @@ namespace UnityCTVisualizer
             }
         }
 
-        private void OnAlphaCutoffSliderChange(float newVal)
+        private void OnOpacityCutoffSliderChange(float val)
         {
-            VisualizationParametersEvents.ViewAlphaCutoffChange?.Invoke(newVal);
+            VisualizationParametersEvents.ViewAlphaCutoffChange?.Invoke(val);
+            m_OpacityCutoffInputField.text = val.ToString("0.00");
         }
 
-        private void OnSamplingQualityFactorSliderChange(float newVal)
+        private void OnSamplingQualityFactorSliderChange(float val)
         {
-            VisualizationParametersEvents.ViewSamplingQualityFactorChange?.Invoke(newVal);
+            VisualizationParametersEvents.ViewSamplingQualityFactorChange?.Invoke(val);
+            m_SamplingQualityFactorInputField.text = val.ToString("0.00");
         }
 
         private void OnLODQualityFactorSliderChange(float val)
         {
             VisualizationParametersEvents.ViewLODQualityFactorChange?.Invoke(val);
+            m_LODQualityFactorInputField.text = val.ToString("0.00");
         }
 
 
@@ -116,32 +136,30 @@ namespace UnityCTVisualizer
         /// MODEL CALLBACKS
         /////////////////////////////////
 
-        private void OnModelTFChange(TF new_tf, ITransferFunction _)
-        {
-            // do NOT set using value otherwise infinite event callbacks will occur!
-            m_TFDropDown.SetValueWithoutNotify((int)new_tf);
-        }
+        // do NOT set using value otherwise infinite event callbacks will occur!
+        private void OnModelTFChange(TF new_tf, ITransferFunction _) => m_TFDropDown.SetValueWithoutNotify((int)new_tf);
 
 
         private void OnModelAlphaCutoffChange(float value)
         {
-            m_AlphaCutoffSlider.SetValueWithoutNotify(value);
+            m_OpacityCutoffSlider.SetValueWithoutNotify(value);
+            m_OpacityCutoffInputField.text = value.ToString("0.00");
         }
+
 
         private void OnModelSamplingQualityFactorChange(float value)
         {
             m_SamplingQualityFactorSlider.SetValueWithoutNotify(value);
+            m_SamplingQualityFactorInputField.text = value.ToString("0.00");
         }
+
 
         private void OnModelLODQualityFactorChange(float value)
         {
             m_LODQualityFactorSlider.SetValueWithoutNotify(value);
+            m_LODQualityFactorInputField.text = value.ToString("0.00");
         }
 
-
-        private void OnModelInterpolationChange(INTERPOLATION value)
-        {
-            m_InterpolationDropDown.SetValueWithoutNotify((int)value);
-        }
+        private void OnModelInterpolationChange(INTERPOLATION value) => m_InterpolationDropDown.SetValueWithoutNotify((int)value);
     }
 }

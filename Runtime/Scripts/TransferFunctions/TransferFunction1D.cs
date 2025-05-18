@@ -9,9 +9,8 @@ namespace UnityCTVisualizer
 {
     public class TransferFunction1D : ITransferFunction
     {
-
-        public static readonly int MAX_COLOR_CONTROL_POINTS = 32;
-        public static readonly int MAX_ALPHA_CONTROL_POINTS = 32;
+        public static readonly int MAX_COLOR_CONTROL_POINTS = 16;
+        public static readonly int MAX_ALPHA_CONTROL_POINTS = 16;
 
         private readonly Dictionary<int, ControlPoint<float, Color>> m_ColorControls = new(MAX_COLOR_CONTROL_POINTS);
         private readonly Dictionary<int, ControlPoint<float, float>> m_AlphaControls = new(MAX_ALPHA_CONTROL_POINTS);
