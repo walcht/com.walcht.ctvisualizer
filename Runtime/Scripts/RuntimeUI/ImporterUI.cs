@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -8,8 +9,9 @@ namespace UnityCTVisualizer
 {
     public class ImporterUI : MonoBehaviour
     {
-        [SerializeField] Button m_ImportBtn;
-        [SerializeField] TMP_InputField m_FilepathInputField;
+        [SerializeField] TMP_InputField m_CVDSNameInputField;
+        [SerializeField] Button m_ImportCVDSBtn;
+        [SerializeField] Button m_VisualizeBtn;
 
 
         /////////////////////////////////////
@@ -53,42 +55,13 @@ namespace UnityCTVisualizer
         CVDSMetadata m_CurrentMetadata;
         Color m_DefaultTextColor;
 
-        void OnEnable()
-        {
-            // make sure that initially the progress handler is disabled
-            m_ProgressHandler.gameObject.SetActive(false);
+        private ManagerUI m_ManagerUI;
 
-            // disable import button
-            m_ImportBtn.interactable = false;
-
-            // event listeners
-            m_FilepathInputField.onSubmit.AddListener(OnFilepathSubmit);
-            m_ImportBtn.onClick.AddListener(OnImportClick);
-            m_RenderingMode.onValueChanged.AddListener(OnRenderingModeChange);
-            m_MaxNbrBrickRequestsPerFrame.onValueChanged.AddListener(OnMaxNbrBrickRequestsPerFrameChange);
-            m_OctreeMaxDepth.onValueChanged.AddListener(OnOctreeMaxDepthChange);
-            m_RandomSeedToggle.onValueChanged.AddListener(OnRandomSeedToggle);
-        }
-
-        private void Start()
-        {
-            m_RandomSeedToggle.onValueChanged.Invoke(m_RandomSeedToggle.isOn);
-        }
-
-        void OnDisable()
-        {
-            m_FilepathInputField.onSubmit.RemoveAllListeners();
-            m_ImportBtn.onClick.RemoveAllListeners();
-            m_BrickSize.onValueChanged.RemoveAllListeners();
-            m_RenderingMode.onValueChanged.RemoveAllListeners();
-            m_MaxNbrBrickRequestsPerFrame.onValueChanged.RemoveAllListeners();
-            m_OctreeMaxDepth.onValueChanged.RemoveAllListeners();
-            m_RandomSeedToggle.onValueChanged.RemoveAllListeners();
-        }
 
         void Awake()
         {
-            m_DefaultTextColor = m_FilepathInputField.textComponent.color;
+            m_CVDSNameInputField.readOnly = true;
+            m_DefaultTextColor = m_CVDSNameInputField.textComponent.color;
 
             // initialize debugging params
             m_Benchmark.isOn = false;
@@ -104,14 +77,74 @@ namespace UnityCTVisualizer
             m_RandomSeedToggle.interactable = true;
         }
 
+
+        void OnEnable()
+        {
+            if (m_ManagerUI == null)
+            {
+                throw new Exception("Init has to be called before enabling this Importer UI");
+            }
+
+            // make sure that initially the progress handler is disabled
+            m_ProgressHandler.gameObject.SetActive(false);
+
+            // disable import button
+            m_VisualizeBtn.interactable = false;
+
+            // event listeners
+            m_ImportCVDSBtn.onClick.AddListener(OnImportCVDSClick);
+            m_VisualizeBtn.onClick.AddListener(OnVisualizeClick);
+            m_RenderingMode.onValueChanged.AddListener(OnRenderingModeChange);
+            m_MaxNbrBrickRequestsPerFrame.onValueChanged.AddListener(OnMaxNbrBrickRequestsPerFrameChange);
+            m_OctreeMaxDepth.onValueChanged.AddListener(OnOctreeMaxDepthChange);
+            m_RandomSeedToggle.onValueChanged.AddListener(OnRandomSeedToggle);
+        }
+
+
+        private void Start()
+        {
+            m_RandomSeedToggle.onValueChanged.Invoke(m_RandomSeedToggle.isOn);
+        }
+
+
+        public void Init(ManagerUI managerUI)
+        {
+            m_ManagerUI = managerUI;
+        }
+
+
+        void OnDisable()
+        {
+            m_ImportCVDSBtn.onClick.RemoveAllListeners();
+            m_VisualizeBtn.onClick.RemoveAllListeners();
+            m_BrickSize.onValueChanged.RemoveAllListeners();
+            m_RenderingMode.onValueChanged.RemoveAllListeners();
+            m_MaxNbrBrickRequestsPerFrame.onValueChanged.RemoveAllListeners();
+            m_OctreeMaxDepth.onValueChanged.RemoveAllListeners();
+            m_RandomSeedToggle.onValueChanged.RemoveAllListeners();
+        }
+
+
         /////////////////////////////////
         /// UI CALLBACKS (VIEW INVOKES)
         /////////////////////////////////
-        void OnFilepathSubmit(string fp)
+        void OnImportCVDSClick()
         {
+            m_ManagerUI.RequestFilesystemEntry(FilesystemExplorerMode.CVDS);
+            m_ManagerUI.FilesystemExplorerEntry += OnFilesystemEntrySelection;
+        }
+
+
+        void OnFilesystemEntrySelection(string directoryPath)
+        {
+            m_ManagerUI.FilesystemExplorerEntry -= OnFilesystemEntrySelection;
+            if (!Directory.Exists(directoryPath))
+            {
+                return;
+            }
             try
             {
-                m_CurrentMetadata = Importer.ImportMetadata(fp);
+                m_CurrentMetadata = Importer.ImportMetadata(directoryPath);
 
                 {
                     // fill the allowed number of importer threads options
@@ -202,7 +235,7 @@ namespace UnityCTVisualizer
                     m_BrickRequestsRandomTexSize.value = 7;  // default: 2^7 = 128
                 }
 
-                m_ImportBtn.interactable = true;
+                m_VisualizeBtn.interactable = true;
                 m_NbrImporterThreads.interactable = true;
                 m_BrickSize.interactable = true;
                 m_RenderingMode.interactable = true;
@@ -211,15 +244,16 @@ namespace UnityCTVisualizer
 
                 m_RenderingMode.onValueChanged.Invoke(m_RenderingMode.value);
 
-                m_FilepathInputField.textComponent.color = m_DefaultTextColor;
+                m_CVDSNameInputField.textComponent.color = m_DefaultTextColor;
+                m_CVDSNameInputField.text = new DirectoryInfo(directoryPath).Name;
 
-                Debug.Log($"successfully imported CVDS metadta from: {fp}");
+                Debug.Log($"successfully imported CVDS metadta from: {directoryPath}");
             }
             catch (Exception e)
             {
                 m_CurrentMetadata = null;
 
-                m_ImportBtn.interactable = false;
+                m_VisualizeBtn.interactable = false;
                 m_NbrImporterThreads.interactable = false;
                 m_BrickSize.interactable = false;
                 m_RenderingMode.interactable = false;
@@ -231,16 +265,15 @@ namespace UnityCTVisualizer
                 m_OctreeStartDepth.interactable = false;
                 m_BrickRequestsRandomTexSize.interactable = false;
 
-                m_FilepathInputField.textComponent.color = Color.red;
-                Debug.LogError($"failed to import CVDS metadta from: {fp}, reason: {e.Message}");
+                m_CVDSNameInputField.textComponent.color = Color.red;
+                Debug.LogError($"failed to import CVDS metadta from: {directoryPath}, reason: {e.Message}");
             }
-
         }
 
 
         void OnRenderingModeChange(int idx)
         {
-            m_ImportBtn.interactable = true;
+            m_VisualizeBtn.interactable = true;
             m_NbrImporterThreads.interactable = true;
             m_BrickSize.interactable = true;
             m_RenderingMode.interactable = true;
@@ -309,7 +342,7 @@ namespace UnityCTVisualizer
         }
 
 
-        void OnImportClick() => InitializationEvents.OnMetadataImport?.Invoke(
+        void OnVisualizeClick() => InitializationEvents.OnMetadataImport?.Invoke(
             new Tuple<CVDSMetadata, PipelineParams, DebugginParams>(
               m_CurrentMetadata,
               new PipelineParams()
