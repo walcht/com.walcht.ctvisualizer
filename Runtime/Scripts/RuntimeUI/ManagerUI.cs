@@ -20,18 +20,16 @@ namespace UnityCTVisualizer
 
         private void Awake()
         {
-            m_TransferFunction1DUI.gameObject.SetActive(false);
-            m_VisualizationParamsUI.gameObject.SetActive(false);
+            m_TransferFunction1DUI.gameObject.SetActive(true);
+            m_VisualizationParamsUI.gameObject.SetActive(true);
             m_ProgressHandlerUI.gameObject.SetActive(false);
         }
 
         private void OnEnable()
         {
             m_ImporterUI.gameObject.SetActive(true);
-            VisualizationParametersEvents.ModelTFChange += OnModelTFChange;
 
             InitializationEvents.OnMetadataImport += OnMetadataImport;
-            InitializationEvents.OnVolumetricDatasetCreation += OnVolumetricDatasetCreation;
             InitializationEvents.OnHistogramImport += OnHistogramImport;
 
             // progress handler events
@@ -41,38 +39,18 @@ namespace UnityCTVisualizer
         private void OnDisable()
         {
             m_ImporterUI.gameObject.SetActive(false);
-            VisualizationParametersEvents.ModelTFChange -= OnModelTFChange;
 
             InitializationEvents.OnMetadataImport -= OnMetadataImport;
-            InitializationEvents.OnVolumetricDatasetCreation -= OnVolumetricDatasetCreation;
             InitializationEvents.OnHistogramImport -= OnHistogramImport;
 
             // progress handler events
             ProgressHandlerEvents.OnRequestActivate -= ProgressHandlerEvents_OnRequestActivate;
         }
 
-        private void OnModelTFChange(TF new_tf, ITransferFunction tf_so)
-        {
-            switch (new_tf)
-            {
-                case TF.TF1D:
-                // disable other TFUIs here
-                m_TransferFunction1DUI.Init((TransferFunction1D)tf_so);
-                m_TransferFunction1DUI.gameObject.SetActive(true);
-                break;
-            }
-        }
-
         void OnMetadataImport(Tuple<CVDSMetadata, PipelineParams, DebugginParams> args)
         {
             m_MetadataUI.Init(args.Item1);
             m_MetadataUI.gameObject.SetActive(true);
-        }
-
-        void OnVolumetricDatasetCreation(VolumetricDataset _)
-        {
-            // initial state for these objects is "undefined" but they are listening for change
-            m_VisualizationParamsUI.gameObject.SetActive(true);
         }
 
         void OnHistogramImport(UInt64[] histogram)

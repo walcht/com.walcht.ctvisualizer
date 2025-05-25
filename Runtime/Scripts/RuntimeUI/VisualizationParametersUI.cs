@@ -26,6 +26,9 @@ namespace UnityCTVisualizer
         [SerializeField] Slider m_LODQualityFactorSlider;
         [SerializeField] TMP_InputField m_LODQualityFactorInputField;
         [SerializeField] TMP_Dropdown m_InterpolationDropDown;
+        [SerializeField] Slider m_HomogeneityToleranceSlider;
+        [SerializeField] TMP_InputField m_HomogeneityToleranceInputField;
+
 
         /////////////////////////////////
         // CACHED COMPONENTS
@@ -66,6 +69,12 @@ namespace UnityCTVisualizer
             m_LODQualityFactorSlider.maxValue = 5.00f;
             m_LODQualityFactorInputField.readOnly = false;
             m_LODQualityFactorInputField.contentType = TMP_InputField.ContentType.DecimalNumber;
+
+            m_HomogeneityToleranceSlider.wholeNumbers = true;
+            m_HomogeneityToleranceSlider.minValue = 0;
+            m_HomogeneityToleranceSlider.maxValue = 255;
+            m_HomogeneityToleranceInputField.readOnly = false;
+            m_HomogeneityToleranceInputField.contentType = TMP_InputField.ContentType.IntegerNumber;
         }
 
         private void OnEnable()
@@ -82,12 +91,15 @@ namespace UnityCTVisualizer
             m_SamplingQualityFactorInputField.onSubmit.AddListener(OnSamplingQualityFactorInput);
             m_LODQualityFactorSlider.onValueChanged.AddListener(OnLODQualityFactorInput);
             m_LODQualityFactorInputField.onSubmit.AddListener(OnLODQualityFactorInput);
+            m_HomogeneityToleranceSlider.onValueChanged.AddListener(OnHomogeneityToleranceInput);
+            m_HomogeneityToleranceInputField.onSubmit.AddListener(OnHomogeneityToleranceInput);
 
             VisualizationParametersEvents.ModelTFChange += OnModelTFChange;
             VisualizationParametersEvents.ModelOpacityCutoffChange += OnModelOpacityCutoffChange;
             VisualizationParametersEvents.ModelSamplingQualityFactorChange += OnModelSamplingQualityFactorChange;
             VisualizationParametersEvents.ModelLODQualityFactorChange += OnModelLODQualityFactorChange;
             VisualizationParametersEvents.ModelInterpolationChange += OnModelInterpolationChange;
+            VisualizationParametersEvents.ModelHomogeneityToleranceChange += OnModelHomogeneityToleranceChange;
         }
 
         private void OnDisable()
@@ -102,12 +114,15 @@ namespace UnityCTVisualizer
             m_SamplingQualityFactorInputField.onSubmit.RemoveAllListeners();
             m_LODQualityFactorSlider.onValueChanged.RemoveAllListeners();
             m_LODQualityFactorInputField.onSubmit.RemoveAllListeners();
+            m_HomogeneityToleranceSlider.onValueChanged.RemoveAllListeners();
+            m_HomogeneityToleranceInputField.onSubmit.RemoveAllListeners();
 
             VisualizationParametersEvents.ModelTFChange -= OnModelTFChange;
             VisualizationParametersEvents.ModelOpacityCutoffChange -= OnModelOpacityCutoffChange;
             VisualizationParametersEvents.ModelSamplingQualityFactorChange -= OnModelSamplingQualityFactorChange;
             VisualizationParametersEvents.ModelLODQualityFactorChange -= OnModelLODQualityFactorChange;
             VisualizationParametersEvents.ModelInterpolationChange -= OnModelInterpolationChange;
+            VisualizationParametersEvents.ModelHomogeneityToleranceChange -= OnModelHomogeneityToleranceChange;
         }
 
         /////////////////////////////////
@@ -154,6 +169,12 @@ namespace UnityCTVisualizer
         private void OnLODQualityFactorInput(string val) => VisualizationParametersEvents.ViewLODQualityFactorChange?.Invoke(float.Parse(val));
 
 
+        private void OnHomogeneityToleranceInput(float val) => VisualizationParametersEvents.ViewHomogeneityToleranceChange?.Invoke((byte)Mathf.Clamp(val, 0, 255));
+
+
+        private void OnHomogeneityToleranceInput(string val) => VisualizationParametersEvents.ViewHomogeneityToleranceChange?.Invoke((byte)Mathf.Clamp(int.Parse(val), 0, 255));
+
+
         /////////////////////////////////
         /// MODEL CALLBACKS
         /////////////////////////////////
@@ -182,6 +203,14 @@ namespace UnityCTVisualizer
             m_LODQualityFactorInputField.SetTextWithoutNotify(value.ToString("0.00"));
         }
 
+
         private void OnModelInterpolationChange(INTERPOLATION value) => m_InterpolationDropDown.SetValueWithoutNotify((int)value);
+
+
+        private void OnModelHomogeneityToleranceChange(byte value)
+        {
+            m_HomogeneityToleranceSlider.SetValueWithoutNotify(value);
+            m_HomogeneityToleranceInputField.SetTextWithoutNotify(value.ToString("0"));
+        }
     }
 }

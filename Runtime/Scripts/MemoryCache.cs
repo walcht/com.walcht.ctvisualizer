@@ -77,7 +77,7 @@ public class MemoryCache<T> where T : unmanaged
 
     public MemoryCache(long memory_size_limit_mb, long brick_size_bytes)
     {
-        m_max_capacity = Mathf.CeilToInt((1024 * memory_size_limit_mb / (brick_size_bytes / 1024.0f)));
+        m_max_capacity = Mathf.CeilToInt(1024 * memory_size_limit_mb / (brick_size_bytes / 1024.0f));
         m_cache = new(Environment.ProcessorCount, m_max_capacity);
         m_homogeneious_cache = new(Environment.ProcessorCount, m_max_capacity);
         m_sorted_keys = new UInt32[m_max_capacity];
@@ -152,6 +152,4 @@ public class MemoryCache<T> where T : unmanaged
 
 
     public bool Contains(UInt32 id) => m_cache.ContainsKey(id);
-
-    public int GetMaxNumberHomogeneuousEntries() => m_max_capacity;
 }

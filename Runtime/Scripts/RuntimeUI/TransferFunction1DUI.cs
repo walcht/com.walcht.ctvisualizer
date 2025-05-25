@@ -114,6 +114,7 @@ namespace UnityCTVisualizer
         private void Awake()
         {
             m_ColorAlphaControlsTag = TagHandle.GetExistingTag("ColorAlphaControls");
+            InitializeHistogramTex();
         }
 
 
@@ -151,11 +152,7 @@ namespace UnityCTVisualizer
 
         void OnEnable()
         {
-            if (m_TransferFunction == null)
-            {
-                throw new Exception("Init should be appropriately called before enabling this UI.");
-            }
-
+            VisualizationParametersEvents.ModelTFChange += OnModelTFChange;
             TransferFunctionEvents.ModelTF1DColorControlAddition += OnModelTF1DColorControlAddition;
             TransferFunctionEvents.ModelTF1DColorControlRemoval += OnModelTF1DColorControlRemoval;
             TransferFunctionEvents.ModelTF1DAlphaControlAddition += OnModelTF1DAlphaControlAddition;
@@ -181,6 +178,7 @@ namespace UnityCTVisualizer
 
         void OnDisable()
         {
+            VisualizationParametersEvents.ModelTFChange -= OnModelTFChange;
             TransferFunctionEvents.ModelTF1DColorControlAddition -= OnModelTF1DColorControlAddition;
             TransferFunctionEvents.ModelTF1DColorControlRemoval -= OnModelTF1DColorControlRemoval;
             TransferFunctionEvents.ModelTF1DAlphaControlAddition -= OnModelTF1DAlphaControlAddition;
@@ -243,43 +241,6 @@ namespace UnityCTVisualizer
                 .SetUseWorldSpace(false)
                 .SetAlignment(LineAlignment.TransformZ)
                 .Attach(m_YAxisContainer.gameObject);
-        }
-
-
-        public void Init(TransferFunction1D tf)
-        {
-            m_TransferFunction = tf;
-
-            InitializeHistogramTex();
-
-            m_ColorControlPoints.Clear();
-
-            // synchronize control points UI array with underlying transfer function data
-            foreach (var colorCpID in m_TransferFunction.GetColorControlPointIDs())
-            {
-                m_TransferFunction.TryGetColorControlPoint(colorCpID, out var cp);
-                AddColorControlPointUI(colorCpID, cp);
-            }
-
-            foreach (var alphaCpID in m_TransferFunction.GetAlphaControlPointIDs())
-            {
-                m_TransferFunction.TryGetAlphaControlPoint(alphaCpID, out var cp);
-                AddAlphaControlPointUI(alphaCpID, cp);
-            }
-
-            // select first element by default
-            if (m_ColorControlPoints.Count > 0)
-                UpdateCurrColorControlPointID(m_ColorControlPoints.Keys.First());
-            else
-                UpdateCurrColorControlPointID(-1);
-            if (m_AlphaControlPoints.Count > 0)
-                UpdateCurrAlphaControlPointID(m_AlphaControlPoints.Keys.First());
-            else
-                UpdateCurrAlphaControlPointID(-1);
-
-            // the color lookup texture is managed by the underlying transfer function - we just need to
-            // assign it and forget about it
-            m_GradientColorImage.texture = m_TransferFunction.GetColorLookupTex();
         }
 
 
@@ -365,10 +326,6 @@ namespace UnityCTVisualizer
             m_HistogramTex.Apply();
         }
 
-
-        void AddColorControlPoint(ControlPoint<float, Color> cp)
-        {
-        }
 
         private void AddColorControlPointUI(int cpID, ControlPoint<float, Color> cp)
         {
@@ -657,6 +614,46 @@ namespace UnityCTVisualizer
                 StopCoroutine(m_CurrControlPointDeselectedCoroutine);
             m_CurrControlPointDeselectedCoroutine =
                 StartCoroutine(OnControlPointDeselectedCoroutine(m_AlphaControlPoints[cpID].gameObject));
+        }
+
+
+        void OnModelTFChange(TF new_tf, ITransferFunction tf) {
+            // TODO: handle multiple TFs - this is a questionable feature to add
+            if (m_TransferFunction != null)
+            {
+                return;
+            }
+            m_TransferFunction = (TransferFunction1D)tf;
+
+            m_AlphaControlPoints.Clear();
+            m_ColorControlPoints.Clear();
+
+            // synchronize control points UI array with underlying transfer function data
+            foreach (var colorCpID in m_TransferFunction.GetColorControlPointIDs())
+            {
+                m_TransferFunction.TryGetColorControlPoint(colorCpID, out var cp);
+                AddColorControlPointUI(colorCpID, cp);
+            }
+
+            foreach (var alphaCpID in m_TransferFunction.GetAlphaControlPointIDs())
+            {
+                m_TransferFunction.TryGetAlphaControlPoint(alphaCpID, out var cp);
+                AddAlphaControlPointUI(alphaCpID, cp);
+            }
+
+            // select first element by default
+            if (m_ColorControlPoints.Count > 0)
+                UpdateCurrColorControlPointID(m_ColorControlPoints.Keys.First());
+            else
+                UpdateCurrColorControlPointID(-1);
+            if (m_AlphaControlPoints.Count > 0)
+                UpdateCurrAlphaControlPointID(m_AlphaControlPoints.Keys.First());
+            else
+                UpdateCurrAlphaControlPointID(-1);
+
+            // the color lookup texture is managed by the underlying transfer function - we just need to
+            // assign it and forget about it
+            m_GradientColorImage.texture = m_TransferFunction.GetColorLookupTex();
         }
 
 

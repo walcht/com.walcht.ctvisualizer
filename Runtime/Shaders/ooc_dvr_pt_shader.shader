@@ -2,8 +2,9 @@
     A software memory virtualization HLSL shader implementation
     based on the paper "Interactive Volume Exploration of Petascale
     Microscopy Data Streams Using a Visualization-Driven Virtual
-    Memory Approach". The implementation makes use of a multi-level,
-    multi-resolution page table hierarchy.
+    Memory Approach". The implementation makes use of a single-level
+    (versus multi-level), multi-resolution page table hierarchy capable
+    of scaling up to large volumetric datasets.
 */
 
 Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
@@ -148,11 +149,13 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
                     + d.y * (nbr_bricks_per_res_lvl[res_lvl].x) + d.x) | (res_lvl << 26);
             }
 
-            int3 get_page_dir_offset(float3 p, int res_lvl) {
+            int3 get_page_dir_offset(float3 p, int res_lvl)
+            {
                 return int3((p * _VolumeDims[0]) / (_BrickSize << res_lvl));
             }
             
-            struct appdata {
+            struct appdata
+            {
                 float4 modelVertex: POSITION;
                 float2 uv: TEXCOORD0;
                 // enable single-pass instanced rendering
@@ -192,7 +195,7 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
                 Ray ray = flipRay(getRayFromBackface(interpolated.modelVertex));
 
                 float step_size =  1.0f / (max(_VolumeDims[0].x, max(_VolumeDims[0].y, _VolumeDims[0].z)) * _SamplingQualityFactor);
-                float epsilon = step_size / 2.0f;
+                float epsilon = step_size / 4.0f;
                 float4 accm_color = float4(0.0f, 0.0f, 0.0f, 0.0f);
 
                 int prev_res_lvl = -1;
@@ -205,13 +208,14 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
 
                 // start from epsilon to avoid out-of-volume rendering artifacts due to
                 // floating point precision
+                [loop]
                 for (float t = epsilon; t < ray.t_out; )
                 {
                     float3 accm_ray = ray.origin + ray.dir * t;
                     int res_lvl = chooseDesiredResolutionLevel(accm_ray);
 
                     // adaptive ray sampling technique
-                    step_size = adpatSamplingDistance(step_size, res_lvl);
+                    // step_size = adpatSamplingDistance(step_size, res_lvl);
 
                     // sample current position
                     float sampled_density = 0.0f;
@@ -226,9 +230,9 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
                         prev_res_lvl = res_lvl;
                     }
 
-                    uint paging_flag = page_dir_entry.w;
+                    uint paging_flag = asuint(page_dir_entry.w) & 0x000000FF;
 
-                    if ((paging_flag != HOMOGENEOUS_PAGE_TABLE_ENTRY) && (paging_flag != UNMAPPED_PAGE_TABLE_ENTRY))
+                    if (paging_flag == MAPPED_PAGE_TABLE_ENTRY)
                     {
                         float3 offset_within_brick = fmod(accm_ray * _VolumeDims[res_lvl],
                             (float)_BrickSize) * _BrickCacheVoxelSize.xyz;
@@ -247,7 +251,8 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
 
                     else if (paging_flag == HOMOGENEOUS_PAGE_TABLE_ENTRY)
                     {
-                        // skip the homogeneous page directory entry
+                        // skip the homogeneous page directory entry - we do NOT want to skip
+                        // a very small distance (e.g., < step_size)
                         float a = max(skip_page_directory_entry(accm_ray, ray.dir, res_lvl) + epsilon, step_size);
                         t += a;
 
@@ -255,7 +260,7 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
                         return fixed4(a, a, a, a) * 100;
 #endif
 
-                        sampled_density = page_dir_entry.x / 255.0f;
+                        sampled_density = page_dir_entry.x;
                     }
 
                     else

@@ -2,9 +2,11 @@ using System;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using TextureSubPlugin;
+using UnityEditor.Build.Content;
 using UnityEngine;
 using UnityEngine.Assertions;
 using UnityEngine.Rendering;
@@ -40,7 +42,7 @@ namespace UnityCTVisualizer
         /////////////////////////////////
         private readonly int SHADER_BRICK_REQUESTS_RANDOM_TEX_ID = Shader.PropertyToID("_BrickRequestsRandomTex");
         private readonly int SHADER_BRICK_REQUESTS_RANDOM_TEX_ST_ID = Shader.PropertyToID("_BrickRequestsRandomTex_ST");
-        private readonly int SHADER_BRICK_REQUESTS_BUFFER_ID = Shader.PropertyToID("brick_requests");
+        private readonly int SHADER_BRICK_REQUESTS_BUFFER_ID = Shader.PropertyToID("raw_brick_requests");
         private readonly int SHADER_NBR_BRICKS_PER_RES_LVL_ID = Shader.PropertyToID("nbr_bricks_per_res_lvl");
         private readonly int SHADER_RESIDENCY_OCTREE_BUFFER_ID = Shader.PropertyToID("residency_octree");
         private readonly int SHADER_OCTREE_START_DEPTH_ID = Shader.PropertyToID("_OctreeStartDepth");
@@ -60,16 +62,17 @@ namespace UnityCTVisualizer
         private readonly int SHADER_LOD_QUALITY_FACTOR_ID = Shader.PropertyToID("_LODQualityFactor");
         private readonly int SHADER_MAX_RES_LVL_ID = Shader.PropertyToID("_MaxResLvl");
 
-        private readonly int MAX_IN_FLIGHT_BRICK_IMPORTS = 6;
 
         /////////////////////////////////
         // CONSTANT DEFINES
         /////////////////////////////////
+        public static readonly int UNUSED_BRICK_CACHE_SLOT = 0;
         public static readonly UInt32 INVALID_BRICK_ID = 0x80000000;
-        private readonly UInt16 MAPPED_PAGE_TABLE_ENTRY = 2;
-        private readonly UInt16 UNMAPPED_PAGE_TABLE_ENTRY = 1;
-        private readonly UInt16 HOMOGENEOUS_PAGE_TABLE_ENTRY = 0;
-        private readonly float MM_TO_METERS = 0.001f;
+        private const byte MAPPED_PAGE_TABLE_ENTRY = 2;
+        private const byte UNMAPPED_PAGE_TABLE_ENTRY = 1;
+        private const byte HOMOGENEOUS_PAGE_TABLE_ENTRY = 0;
+        private const float MM_TO_METERS = 0.001f;
+        private readonly int MAX_BRICK_REPLY_QUEUE_CAPACITY = 32;
 
 
         private VolumetricDataset m_volume_dataset = null;
@@ -108,7 +111,7 @@ namespace UnityCTVisualizer
         private UnmanagedObjectPool<TextureSubImage3DParams> m_tex_params_pool;
 
 
-        private ConcurrentQueue<UInt32> m_brick_reply_queue = new();
+        private readonly ConcurrentQueue<UInt32> m_brick_reply_queue = new();
 
         private ComputeBuffer m_residency_octree_cb;
         private ResidencyNode[] m_residency_octree_data;
@@ -140,6 +143,8 @@ namespace UnityCTVisualizer
             public Int32 brick_cache_idx;
             public UInt32 brick_id;
             public UInt64 timestamp;
+            public byte brick_min;
+            public byte brick_max;
         }
 
         /// <summary>
@@ -169,9 +174,27 @@ namespace UnityCTVisualizer
         // PAGE TABLES
         /////////////////////////////////
         private Texture3D m_page_dir = null;
+
+        /// <summary>
+        ///     Each entry is defined over 4 32-bit floats:
+        ///         0 =>    if flag == MAPPED: normalized position x in the brick cache
+        ///                 else: holds garbage
+        ///         1 =>    if flag == MAPPED: normalized position y in the brick cache
+        ///                 else: holds garbage
+        ///         2 =>    if flag == MAPPED: normalized position z in the brick cache
+        ///                 else: holds garbage
+        ///         3 =>    1st byte holds flag
+        ///                 if flag != UNMAPPED: 2nd byte holds min and 3nd byte holds max
+        /// </summary>
+        private int m_page_dir_stride = 4;
+
         private float[] m_page_dir_data;
         private Vector4[] m_page_dir_base;
         private Vector4[] m_page_dir_dims;
+        // if the homogeneity tolerance changes then this dirty flag should be set
+        // so that all the entries of the page table have to be checked against the
+        // homogeneity tolerance.
+        private bool m_pt_requires_homogeneity_update = false;
 
         /////////////////////////////////
         // OPTIMIZATION STRUCTURES
@@ -215,6 +238,7 @@ namespace UnityCTVisualizer
         private float m_alpha_cutoff;
         private float m_sampling_quality_factor;
         private float m_lod_quality_factor;
+        private byte m_homogeneity_tolerance;
 
 
 
@@ -234,27 +258,50 @@ namespace UnityCTVisualizer
 
         private Vector3Int GetGPUBrickCacheDims(int size_mbs, int brick_size)
         {
+            if (size_mbs >= ((double)SystemInfo.maxTexture3DSize * SystemInfo.maxTexture3DSize * SystemInfo.maxTexture3DSize) / (1024.0 * 1024.0))
+            {
+                throw new Exception("provided brick cache size is greater or equal to the size of the maximal allowed 3D texture on the GPU");
+            }
+
             float brick_size_mbs = (brick_size * brick_size * brick_size) / (1024.0f * 1024.0f);
-            int x = 0;
-            int y = 0;
-            int z = 0;
+            int x = 1;
+            int y = 1;
+            int z = 1;
             float accm_size_mbs = 0;
-            for (; (x < SystemInfo.maxTexture3DSize) && (accm_size_mbs <= size_mbs); x += brick_size)
+
+            while (accm_size_mbs < size_mbs)
             {
-                accm_size_mbs += brick_size_mbs;
-            }
-            for (; (y < SystemInfo.maxTexture3DSize) && (accm_size_mbs <= size_mbs); y += brick_size)
-            {
-                accm_size_mbs += brick_size_mbs;
-            }
-            for (; (z < SystemInfo.maxTexture3DSize) && (accm_size_mbs <= size_mbs); z += brick_size)
-            {
-                accm_size_mbs += brick_size_mbs;
+                // start by increasing along the X axis - each increase adds a YZ plane of bricks
+                if (x < SystemInfo.maxTexture3DSize)
+                {
+                    ++x;
+                    accm_size_mbs += brick_size_mbs * (y * z);
+                }
+
+                if (accm_size_mbs >= size_mbs)
+                    break;
+
+                // then increase along the Y axis - each increase adds an XZ plane of bricks
+                if (y < SystemInfo.maxTexture3DSize)
+                {
+                    ++y;
+                    accm_size_mbs += brick_size_mbs * (x * z);
+                }
+
+                if (accm_size_mbs >= size_mbs)
+                    break;
+
+                // then increase along the Z axis - each increase adds an XY plane of bricks
+                if (z < SystemInfo.maxTexture3DSize)
+                {
+                    ++z;
+                    accm_size_mbs += brick_size_mbs * (x * y);
+                }
             }
             return new Vector3Int(
-                Mathf.Max(x, brick_size),
-                Mathf.Max(y, brick_size),
-                Mathf.Max(z, brick_size)
+                x * brick_size,
+                y * brick_size,
+                z * brick_size
             );
         }
 
@@ -507,9 +554,9 @@ namespace UnityCTVisualizer
 
             Graphics.SetRandomWriteTarget(1, m_brick_requests_cb, true);
 
-            GPUResetBrickRequestsBuffer();
+            GPUResetBrickRequests();
 
-            Debug.Log("brick requests buffer initialized successfully");
+            Debug.Log("brick requests buffer successfully initialized");
         }
 
 
@@ -524,23 +571,23 @@ namespace UnityCTVisualizer
             m_brick_cache_usage = new BrickCacheUsage[brick_cache_usage_size];
             for (int i = 0; i < brick_cache_usage_size; ++i)
             {
-                // 0 means the brick cache slot with index i is unused for that frame.
-                // Any other value means it was used for than frame.
-                m_brick_cache_usage_default_data[i] = 0;
+                m_brick_cache_usage_default_data[i] = UNUSED_BRICK_CACHE_SLOT;
                 m_brick_cache_usage[i] = new BrickCacheUsage()
                 {
                     brick_id = INVALID_BRICK_ID,  // invalid brick ID => free slot
                     brick_cache_idx = i,
-                    timestamp = 0                 // 0 so that when sorted, free slots are placed first
+                    timestamp = 0,                 // 0 so that when sorted, free slots are placed first
+                    brick_min = 0,
+                    brick_max = 0
                 };
             }
             m_material.SetBuffer(SHADER_BRICK_CACHE_USAGE_ID, m_brick_cache_usage_cb);
             Graphics.SetRandomWriteTarget(2, m_brick_cache_usage_cb, true);
-            GPUResetBrickCacheUsageBuffer();
+            GPUResetBrickCacheUsage();
 
             Debug.Log($"brick cache usage buffer elements count: {brick_cache_usage_size}");
             Debug.Log($"brick cache usage size: {brick_cache_usage_size * sizeof(Int32) / 1024.0f} KB");
-            Debug.Log("brick cache usage initialized successfully");
+            Debug.Log("brick cache usage successfully initialized");
         }
 
 
@@ -588,15 +635,17 @@ namespace UnityCTVisualizer
             }
             m_brick_requests_random_tex.SetPixelData(m_brick_requests_random_tex_data, 0);
             m_brick_requests_random_tex.Apply();
+
+            Debug.Log("brick requests random texture successfully initialized");
         }
 
 
         /// <summary>
-        ///     Initializes the top level page directory with other optional intermediary page tables.
+        ///     Initializes the top level page directory.
         /// </summary>
         /// 
         /// <exception cref="Exception">
-        ///     thrown when the target platform does not support RGBA64 texture format
+        ///     thrown when the target platform does not support RGBAFloat texture format
         /// </exception>
         private void InitializePageDirectory()
         {
@@ -633,7 +682,7 @@ namespace UnityCTVisualizer
             // set the alpha components to UNMAPPED
             for (int i = 0; i < page_dir_data_size; i += 4)
             {
-                m_page_dir_data[i + 3] = UNMAPPED_PAGE_TABLE_ENTRY;
+                SetPageEntryAlphaChannelData(i, UNMAPPED_PAGE_TABLE_ENTRY);
             }
 
             if (!SystemInfo.SupportsTextureFormat(TextureFormat.RGBAFloat))
@@ -644,6 +693,9 @@ namespace UnityCTVisualizer
             m_page_dir = new Texture3D(page_dir_dims.x, page_dir_dims.y, page_dir_dims.z,
                 TextureFormat.RGBAFloat, mipChain: false, createUninitialized: true);
 
+            // set this according to the used texture format
+            m_page_dir_stride = 4;
+
             m_page_dir.wrapModeU = TextureWrapMode.Clamp;
             m_page_dir.wrapModeV = TextureWrapMode.Clamp;
             m_page_dir.wrapModeW = TextureWrapMode.Clamp;
@@ -651,7 +703,6 @@ namespace UnityCTVisualizer
             // set shader properties
             m_material.SetVectorArray(SHADER_PAGE_DIR_BASE_ID, m_page_dir_base);
             m_material.SetVectorArray(SHADER_PAGE_DIR_DIMS_ID, m_page_dir_dims);
-
             m_material.SetTexture(SHADER_PAGE_DIR_TEX_ID, m_page_dir);
 
             // load the initial page table texture data into the GPU
@@ -762,6 +813,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ModelSamplingQualityFactorChange += OnModelSamplingQualityFactorChange;
             VisualizationParametersEvents.ModelLODQualityFactorChange += OnModelLODQualityFactorChange;
             VisualizationParametersEvents.ModelInterpolationChange += OnModelInterpolationChange;
+            VisualizationParametersEvents.ModelHomogeneityToleranceChange += OnModelHomogeneityChange;
         }
 
         private void OnDisable()
@@ -771,6 +823,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ModelSamplingQualityFactorChange -= OnModelSamplingQualityFactorChange;
             VisualizationParametersEvents.ModelLODQualityFactorChange -= OnModelLODQualityFactorChange;
             VisualizationParametersEvents.ModelInterpolationChange -= OnModelInterpolationChange;
+            VisualizationParametersEvents.ModelHomogeneityToleranceChange -= OnModelHomogeneityChange;
 
             // clear UAV targets
             Graphics.ClearRandomWriteTargets();
@@ -953,9 +1006,77 @@ namespace UnityCTVisualizer
         }
 
 
+        /// <summary>
+        ///     Retrieves brick requests from the GPU. Retreived brick IDs may not be unique
+        ///     especially with large brick sizes and small brick request random textures.
+        ///     The filled-up brick requests array should be filtered before proceding to
+        ///     importing the actual bricks/chunks.
+        /// </summary>
+        /// 
+        /// <param name="brick_requests">
+        ///     array that will be overwritten with brick requests retrieved from the GPU.
+        ///     Array should have the length of MaxNbrBrickRequestsPerFrame.
+        /// </param>
         private void GPUGetBrickRequests(UInt32[] brick_requests)
         {
             m_brick_requests_cb.GetData(brick_requests);
+        }
+
+
+        /// <summary>
+        ///     Filters raw brick requests fetched from the GPU by removing duplicates, 
+        ///     invalid brick IDs, requests that are already in flight (i.e., already
+        ///     dispatched and being processed), and IDs that are already mapped.
+        /// </summary>
+        /// 
+        /// <param name="raw_brick_requests">
+        ///     Array of raw brick requests retrieved from the GPU.
+        /// </param>
+        /// 
+        /// <param name="filtered_brick_requests">
+        ///     Set that will be filled with filtered brick requests. Ideally, the set
+        ///     should be initialized with the same capacity as the supplied
+        ///     <paramref name="raw_brick_requests"/>.
+        /// </param>
+        private void FilterBrickRequests(UInt32[] raw_brick_requests, HashSet<UInt32> filtered_brick_requests)
+        {
+            filtered_brick_requests.Clear();
+            foreach (UInt32 brick_id in raw_brick_requests)
+            {
+                if (m_brick_reply_queue.Count >= MAX_BRICK_REPLY_QUEUE_CAPACITY)
+                {
+                    break;
+                }
+                if (brick_id == INVALID_BRICK_ID)
+                {
+                    continue;
+                }
+                byte page_entry_flag = ExtractPageEntryAlphaChannelData(GetPageTableIndex(brick_id)).flag;
+                // cleanup brick requests
+                if (!m_cpu_cache.Contains(brick_id) && !m_in_flight_brick_imports.ContainsKey(brick_id)
+                    && page_entry_flag == UNMAPPED_PAGE_TABLE_ENTRY)
+                {
+                    filtered_brick_requests.Add(brick_id);
+                }
+                else if (m_cpu_cache.Contains(brick_id) && !m_in_flight_brick_imports.ContainsKey(brick_id)
+                    && page_entry_flag == UNMAPPED_PAGE_TABLE_ENTRY && !m_brick_reply_queue.Contains(brick_id))
+                {
+                    // update the internal LRU timestamp so that this doesn't get discarded
+                    m_cpu_cache.Get(brick_id);
+                    m_brick_reply_queue.Enqueue(brick_id);
+                }
+            }
+        }
+
+
+        private void CheckBrickRequestsCompletionStatus(HashSet<UInt32> filtered_brick_requests)
+        {
+            // if no more new brick requests are dispatched and also no bricks are currently
+            // being processed
+            if (filtered_brick_requests.Count == 0 && m_in_flight_brick_imports.Count == 0)
+            {
+                OnNoMoreBrickRequests?.Invoke();
+            }
         }
 
 
@@ -976,64 +1097,42 @@ namespace UnityCTVisualizer
 
 
         /// <summary>
-        ///     Imports bricks into the CPU-memory brick cache if they are not already resident there.
-        ///     Brick IDs set to INVALID_BRICK_ID are simply ignored.
+        ///     Dispatches async brick imports for provided brick requests.
         /// </summary>
         /// 
-        /// <param name="brick_ids">
-        ///     Collection of brick IDs to try to load into the CPU-memory cache.
+        /// <param name="filtered_brick_requests">
+        ///     Collection of newly requested brick IDs to try to load into the CPU-memory cache.
         /// </param>
-        private void ImportBricksIntoMemoryCache(UInt32[] brick_ids, int nbr_importer_threads = -1)
+        private void ImportBricksIntoMemoryCache(HashSet<UInt32> filtered_brick_requests)
         {
-            // if (m_in_flight_brick_imports.Count > MAX_IN_FLIGHT_BRICK_IMPORTS) { return; }
-
-            UInt32[] filtered_brick_ids = new UInt32[m_PipelineParams.MaxNbrBrickRequestsPerFrame];
-
-            // first cleanup the brick requests list (remove duplicates, invalid IDs,
-            // bricks already in cache, and bricks that are currently being loaded)
-            int count = 0;
-            for (int i = 0; i < brick_ids.Length; ++i)
+            if (filtered_brick_requests.Count == 0)
             {
-                if ((brick_ids[i] != INVALID_BRICK_ID) && !m_cpu_cache.Contains(brick_ids[i])
-                    && !m_in_flight_brick_imports.ContainsKey(brick_ids[i]))
-                {
-                    /*
-                    if (m_cpu_cache.Contains(brick_ids[i]))
-                    {
-                        m_brick_reply_queue.Enqueue(brick_ids[i]);
-                        continue;
-                    }
-                    */
-                    // save this brick IDs so that future imports know it is being imported
-                    // this is semantically a HashSet, the value 0 is fully arbitrary
-                    m_in_flight_brick_imports[brick_ids[i]] = 0;
-                    filtered_brick_ids[count] = brick_ids[i];
-                    ++count;
-                }
-            }
-
-            if (count == 0)
-            {
-                // finally, no more brick requests - the GPU must be so happy
-                if (m_in_flight_brick_imports.Count == 0)
-                    OnNoMoreBrickRequests?.Invoke();
                 return;
             }
 
-            int nbr_threads = nbr_importer_threads > 0 ? nbr_importer_threads :
+            int nbr_threads = m_PipelineParams.MaxNbrImporterThreads > 0 ? m_PipelineParams.MaxNbrImporterThreads:
                 Math.Max(Environment.ProcessorCount - 2, 1);
+
+            // make sure to copy the brick requests data in the main thread and not
+            // inside the Task.Run callback!
+            UInt32[] brick_ids = new UInt32[filtered_brick_requests.Count];
+            filtered_brick_requests.CopyTo(brick_ids);
 
             Task t = Task.Run(() =>
             {
-                Parallel.For(0, count, new ParallelOptions()
+                Parallel.For(0, brick_ids.Length, new ParallelOptions()
                 {
                     TaskScheduler = new LimitedConcurrencyLevelTaskScheduler(nbr_threads)
                 }, i =>
                 {
-                    UInt32 brick_id = filtered_brick_ids[i];
-                    Importer.ImportBrick(m_metadata, brick_id, m_brick_size, m_cpu_cache);
-                    m_in_flight_brick_imports.Remove(brick_id, out byte _);
-                    m_brick_reply_queue.Enqueue(brick_id);
+                    if (m_brick_reply_queue.Count <= MAX_BRICK_REPLY_QUEUE_CAPACITY && !m_brick_reply_queue.Contains(brick_ids[i]))
+                    {
+                        // save this brick IDs so that future imports know it is being imported
+                        // this is semantically a HashSet, the value 0 is completely arbitrary
+                        m_in_flight_brick_imports[brick_ids[i]] = 0;
+                        Importer.ImportBrick(m_metadata, brick_ids[i], m_brick_size, m_cpu_cache);
+                        m_brick_reply_queue.Enqueue(brick_ids[i]);
+                    }
                 });
             });
             t.ContinueWith(t => { Debug.LogException(t.Exception); }, TaskContinuationOptions.OnlyOnFaulted);
@@ -1044,8 +1143,8 @@ namespace UnityCTVisualizer
 
 
         /// <summary>
-        ///     Out-of-core virtual memory loop. This loop handles on-demand GPU brick requests,
-        ///     manages the different caches, and synchronizes CPU-GPU resources.
+        ///     Out-of-core virtual memory (i.e., page table) loop. This loop handles on-demand
+        ///     GPU brick requests, manages the different caches, and synchronizes CPU-GPU resources.
         /// </summary>
         public IEnumerator OOCPTLoop()
         {
@@ -1053,24 +1152,22 @@ namespace UnityCTVisualizer
             yield return new WaitUntil(() => (m_volume_dataset != null) && (m_transfer_function != null)
                 && (m_brick_cache != null));
 
-            Debug.Log("started handling GPU brick requests");
+            Debug.Log("[OOC PT] started handling GPU brick requests");
 
             long nbr_bricks_uploaded = 0;
             int nbr_bricks_uploaded_per_frame = 0;
             CommandBuffer cmd_buffer = new();
             GCHandle[] handles = new GCHandle[m_PipelineParams.MaxNbrGPUBrickUploadsPerFrame];
 
-            UInt32[] brick_requests = new UInt32[m_PipelineParams.MaxNbrBrickRequestsPerFrame];
-
-            List<BrickCacheUsage> brick_cache_added_slots = new();
-            List<BrickCacheUsage> brick_cache_evicted_slots = new();
+            UInt32[] raw_brick_requests = new UInt32[m_PipelineParams.MaxNbrBrickRequestsPerFrame];
+            HashSet<UInt32> filtered_brick_requests = new (m_PipelineParams.MaxNbrBrickRequestsPerFrame);
 
             while (true)
             {
                 // wait until current frame rendering is done ...
                 yield return new WaitForEndOfFrame();
 
-                bool page_directory_dity = false;
+                bool page_directory_dirty = false;
 
                 // we can safely assume that bricks uploaded to GPU in previous frame are done
                 nbr_bricks_uploaded += nbr_bricks_uploaded_per_frame;
@@ -1082,13 +1179,15 @@ namespace UnityCTVisualizer
                 m_tex_params_pool.ReleaseAll();
 
                 // get bricks requested by GPU in this frame and import them into bricks memory cache
-                GPUGetBrickRequests(brick_requests);
-                GPUResetBrickRequestsBuffer();
-                ImportBricksIntoMemoryCache(brick_requests, m_PipelineParams.MaxNbrImporterThreads);
+                GPUGetBrickRequests(raw_brick_requests);
+                GPUResetBrickRequests();
+                FilterBrickRequests(raw_brick_requests, filtered_brick_requests);
+                CheckBrickRequestsCompletionStatus(filtered_brick_requests);
+                ImportBricksIntoMemoryCache(filtered_brick_requests);
 
-                // update CPU brick cache usage and reset it on the GPU
-                CPUUpdateBrickCacheUsageBuffer();
-                GPUResetBrickCacheUsageBuffer();
+                // update CPU-side brick cache usage from the GPU and reset it on the GPU
+                GPUGetBrickCacheUsage();
+                GPUResetBrickCacheUsage();
 
                 GPURandomizeBrickRequestsTexOffset();
                 GPUUpdateVisualizationParams();
@@ -1099,6 +1198,18 @@ namespace UnityCTVisualizer
                     m_brick_reply_queue.TryDequeue(out UInt32 brick_id)
                 )
                 {
+                    // TODO: remove assert
+                    Assert.IsTrue(m_brick_reply_queue.Count < MAX_BRICK_REPLY_QUEUE_CAPACITY);
+                    m_in_flight_brick_imports.TryRemove(brick_id, out byte _);
+
+                    // TODO: remove if check
+                    // this should NEVER enter
+                    var page_entry_data = ExtractPageEntryAlphaChannelData(GetPageTableIndex(brick_id));
+                    if (page_entry_data.flag != UNMAPPED_PAGE_TABLE_ENTRY)
+                    {
+                        Debug.Log($"{brick_id} already in PT!");
+                        continue;
+                    }
 
                     // we are sending a managed object to unmanaged thread (i.e., C++) the object has to be pinned
                     // to a fixed location in memory during the plugin call
@@ -1107,10 +1218,10 @@ namespace UnityCTVisualizer
 
                     // in case the brick is homogeneous, avoid adding it the cache and just update the
                     // corresponding page entry
-                    if (brick.min == brick.max)
+                    if ((brick.max - brick.min) <= m_homogeneity_tolerance)
                     {
-                        page_directory_dity = true;
-                        UpdatePageTablesHomogeneousBrick(brick_id, brick.min);
+                        page_directory_dirty = true;
+                        UpdatePageTablesHomogeneousBrick(brick_id, brick.min, brick.max);
                         continue;
                     }
 
@@ -1123,16 +1234,36 @@ namespace UnityCTVisualizer
                     {
                         brick_id = brick_id,
                         timestamp = m_timestamp,
-                        brick_cache_idx = brick_cache_idx
+                        brick_cache_idx = brick_cache_idx,
+                        brick_min = brick.min,
+                        brick_max = brick.max
                     };
                     // check if evicted brick slot is already empty
                     if (!IsBrickCacheSlotEmpty(evicted_slot))
                     {
-                        brick_cache_evicted_slots.Add(evicted_slot);
+                        // set the alpha component to UNMAPPED so the shader knows
+                        SetPageEntryAlphaChannelData(GetPageTableIndex(evicted_slot.brick_id), UNMAPPED_PAGE_TABLE_ENTRY);
+
+                        // in case we want to instantiate brick wireframes (useful for debugging)
+                        if (InstantiateBrickWireframes)
+                        {
+                            Destroy(transform.Find($"brick_{evicted_slot.brick_id & 0x03FFFFFF}_res_lvl_{evicted_slot.brick_id >> 26}").gameObject);
+                        }
                     }
-                    brick_cache_added_slots.Add(added_slot);
                     m_brick_cache_usage[brick_cache_idx] = added_slot;
                     GetBrickCacheSlotPosition(brick_cache_idx, out Vector3Int brick_cache_slot_pos);
+                    GetBrickCacheSlotPosition(brick_cache_idx, out Vector3 brick_cache_slot_pos_normalized);
+                    int page_dir_enty_idx = GetPageTableIndex(added_slot.brick_id);
+                    m_page_dir_data[page_dir_enty_idx] = brick_cache_slot_pos_normalized.x;
+                    m_page_dir_data[page_dir_enty_idx + 1] = brick_cache_slot_pos_normalized.y;
+                    m_page_dir_data[page_dir_enty_idx + 2] = brick_cache_slot_pos_normalized.z;
+                    SetPageEntryAlphaChannelData(page_dir_enty_idx, MAPPED_PAGE_TABLE_ENTRY, added_slot.brick_min, added_slot.brick_max);
+                    page_directory_dirty = true;
+                    // in case we want to instantiate brick wireframes (useful for debugging)
+                    if (InstantiateBrickWireframes)
+                    {
+                        OOCAddBrickWireframeObject(added_slot.brick_id);
+                    }
 
                     // allocate the plugin call's arguments struct
                     TextureSubImage3DParams args = new()
@@ -1163,27 +1294,9 @@ namespace UnityCTVisualizer
                 Graphics.ExecuteCommandBuffer(cmd_buffer);
                 cmd_buffer.Clear();
 
-                if (page_directory_dity || (brick_cache_added_slots.Count > 0)
-                    || (brick_cache_evicted_slots.Count > 0))
+                if (m_pt_requires_homogeneity_update || page_directory_dirty)
                 {
-
-                    GPUUpdatePageTables(brick_cache_added_slots, brick_cache_evicted_slots);
-
-                    if (InstantiateBrickWireframes)
-                    {
-                        foreach (var added_slot in brick_cache_added_slots)
-                        {
-                            OOCAddBrickWireframeObject(added_slot.brick_id);
-                        }
-                        foreach (var evicted_slot in brick_cache_evicted_slots)
-                        {
-                            Destroy(transform.Find($"brick_{evicted_slot.brick_id & 0x03FFFFFF}_res_lvl_{evicted_slot.brick_id >> 26}").gameObject);
-                        }
-                    }
-
-                    brick_cache_added_slots.Clear();
-                    brick_cache_evicted_slots.Clear();
-
+                    GPUUpdatePageTables();
                 }
 
                 // increase timestamp
@@ -1211,7 +1324,8 @@ namespace UnityCTVisualizer
             CommandBuffer cmd_buffer = new();
             GCHandle[] handles = new GCHandle[m_PipelineParams.MaxNbrGPUBrickUploadsPerFrame];
 
-            UInt32[] brick_requests = new UInt32[m_PipelineParams.MaxNbrBrickRequestsPerFrame];
+            UInt32[] raw_brick_requests = new UInt32[m_PipelineParams.MaxNbrBrickRequestsPerFrame];
+            HashSet<UInt32> filtered_brick_requests = new (m_PipelineParams.MaxNbrBrickRequestsPerFrame);
 
             List<BrickCacheUsage> brick_cache_added_slots = new();
             List<BrickCacheUsage> brick_cache_evicted_slots = new();
@@ -1234,13 +1348,14 @@ namespace UnityCTVisualizer
                 m_tex_params_pool.ReleaseAll();
 
                 // get bricks requested by GPU in this frame and import them into bricks memory cache
-                GPUGetBrickRequests(brick_requests);
-                GPUResetBrickRequestsBuffer();
-                ImportBricksIntoMemoryCache(brick_requests, m_PipelineParams.MaxNbrImporterThreads);
+                GPUGetBrickRequests(raw_brick_requests);
+                GPUResetBrickRequests();
+                FilterBrickRequests(raw_brick_requests, filtered_brick_requests);
+                ImportBricksIntoMemoryCache(filtered_brick_requests);
 
                 // update CPU brick cache usage and reset it on the GPU
-                CPUUpdateBrickCacheUsageBuffer();
-                GPUResetBrickCacheUsageBuffer();
+                GPUGetBrickCacheUsage();
+                GPUResetBrickCacheUsage();
 
                 GPURandomizeBrickRequestsTexOffset();
                 GPUUpdateVisualizationParams();
@@ -1263,7 +1378,7 @@ namespace UnityCTVisualizer
                     if (brick.min == brick.max)
                     {
                         page_directory_dity = true;
-                        UpdatePageTablesHomogeneousBrick(brick_id, brick.min);
+                        UpdatePageTablesHomogeneousBrick(brick_id, brick.min, brick.max);
                         continue;
                     }
 
@@ -1322,8 +1437,9 @@ namespace UnityCTVisualizer
                     // make sure to update the brick cache bricks residency HashSet before updating the residency octree!
                     UpdateBrickCacheResidencyHashSet(brick_cache_added_slots, brick_cache_evicted_slots);
                     GPUUpdateResidencyOctree(brick_cache_added_slots, brick_cache_evicted_slots);
-                    GPUUpdatePageTables(brick_cache_added_slots, brick_cache_evicted_slots);
+                    GPUUpdatePageTables();
 
+                    // in case we want to instantiate brick wireframes (useful for debugging)
                     if (InstantiateBrickWireframes)
                     {
                         foreach (var added_slot in brick_cache_added_slots)
@@ -1347,6 +1463,11 @@ namespace UnityCTVisualizer
 
         }  // END COROUTINE
 
+
+        /// <summary>
+        ///     Adds a wireframe object to denote the spatial extent of the provided brick.
+        ///     Useful for debugging purposes and observing out-of-core GPU brick loading.
+        /// </summary>
         private void OOCAddBrickWireframeObject(UInt32 brick_id)
         {
             int id = (int)(brick_id & 0x03FFFFFF);
@@ -1376,19 +1497,28 @@ namespace UnityCTVisualizer
         }
 
 
-        private void GPUResetBrickRequestsBuffer()
+        /// <summary>
+        ///     Resets the GPU brick requests structured buffer. Should be called at the end
+        ///     of each frame and before the execution of the next frame.
+        /// </summary>
+        private void GPUResetBrickRequests()
         {
             m_brick_requests_cb.SetData(m_brick_requests_default_data);
         }
 
-
-        private void CPUUpdateBrickCacheUsageBuffer()
+        /// <summary>
+        ///     Retrieves brick cache usage data from the GPU and updates the CPU-side
+        ///     brick cache usage array. The just-updated brick cache usage array is
+        ///     then sorted according to the timestamp at which the brick was lastly
+        ///     used.
+        /// </summary>
+        private void GPUGetBrickCacheUsage()
         {
             m_brick_cache_usage_cb.GetData(m_brick_cache_usage_tmp);
             for (int i = 0; i < m_brick_cache_usage_tmp.Length; ++i)
             {
-                // filter unused brick slots (0 indicates unused brick slot)
-                if (m_brick_cache_usage_tmp[i] != 0)
+                // filter unused brick slots
+                if (m_brick_cache_usage_tmp[i] != UNUSED_BRICK_CACHE_SLOT)
                 {
                     m_brick_cache_usage[i].timestamp = m_timestamp;
                 }
@@ -1401,7 +1531,7 @@ namespace UnityCTVisualizer
         }
 
 
-        private void GPUResetBrickCacheUsageBuffer()
+        private void GPUResetBrickCacheUsage()
         {
             m_brick_cache_usage_cb.SetData(m_brick_cache_usage_default_data);
         }
@@ -1640,6 +1770,23 @@ namespace UnityCTVisualizer
         }
 
 
+        /// <summary>
+        ///     Computes the page directory (top level page table) index in the underlying
+        ///     flattened data array that corresponds to the provided <paramref name="brick_id"/>.
+        /// </summary>
+        /// 
+        /// <param name="brick_id">
+        ///     Brick ID whose corresponding index in the page directory is computed.
+        /// </param>
+        /// 
+        /// <returns>
+        ///     Index of the page directory entry in the underlying flattened data array.
+        /// </returns>
+        /// 
+        /// <exception cref="Exception">
+        ///     Thrown when provided <paramref name="brick_id"/> is outside the range covered
+        ///     by the page directory.
+        /// </exception>
         private int GetPageTableIndex(UInt32 brick_id)
         {
             int id = (int)(brick_id & 0x03FFFFFF);
@@ -1662,52 +1809,155 @@ namespace UnityCTVisualizer
                 + m_page_dir.width * ((int)m_page_dir_base[res_lvl].y + y)
                 + (int)m_page_dir_base[res_lvl].x + x;
 
-            return idx;
+            return idx * m_page_dir_stride;
         }
 
 
-        private void GPUUpdatePageTables(List<BrickCacheUsage> added_slots, List<BrickCacheUsage> evicted_slots)
+
+        private UInt32 GetBrickIDFromPageTableIndex(int idx)
         {
+            int i = (idx / m_page_dir_stride);
+            int _x = i - (m_page_dir.width * m_page_dir.height);
 
-            bool dirty = false;
-
-            foreach (var added_slot in added_slots)
-            {
-                int idx = GetPageTableIndex(added_slot.brick_id) * 4;
-                GetBrickCacheSlotPosition(added_slot.brick_cache_idx, out Vector3 pos);
-                m_page_dir_data[idx] = pos.x;
-                m_page_dir_data[idx + 1] = pos.y;
-                m_page_dir_data[idx + 2] = pos.z;
-                m_page_dir_data[idx + 3] = MAPPED_PAGE_TABLE_ENTRY;
-                dirty = true;
-
-            }
-
-            foreach (var evicted_slot in evicted_slots)
-            {
-                int idx = GetPageTableIndex(evicted_slot.brick_id) * 4;
-                // set the alpha component to UNMAPPED so the shader knows
-                m_page_dir_data[idx + 3] = UNMAPPED_PAGE_TABLE_ENTRY;
-                dirty = true;
-            }
-
-
-            if (dirty)
-            {
-                m_page_dir.SetPixelData(m_page_dir_data, mipLevel: 0);
-                m_page_dir.Apply();
-            }
-
+            UInt32 res_lvl = 0;
+            UInt32 id = 0;
+            return (res_lvl << 26) & id;
         }
 
 
-        private void UpdatePageTablesHomogeneousBrick(UInt32 brick_id, byte val)
+        private struct PageEntryAlphaChannelData
         {
-            int idx = GetPageTableIndex(brick_id) * 4;
+            /// <summary>
+            ///     Page entry's status flag (i.e., mapped, unmapped, or homogeneous)
+            /// </summary>
+            public byte flag;
+
+            /// <summary>
+            ///     Page entry's minimum data value (useful for determining its homogeneity)
+            /// </summary>
+            public byte min;
+
+            /// <summary>
+            ///     Page entry's maximum data value (useful for determining its homogeneity)
+            /// </summary>
+            public byte max;
+        }
+
+
+        /// <summary>
+        ///     Extracts the page table entry's data (i.e., status flag, min, and max)
+        ///     from the provided page entry index.
+        /// </summary>
+        /// 
+        /// <param name="idx">
+        ///     Index of the page entry in the underlying flattened data array.
+        /// </param>
+        /// 
+        /// <returns>
+        ///     Struct of the data stored in the provided page entry's alpha channel.
+        /// </returns>
+        private PageEntryAlphaChannelData ExtractPageEntryAlphaChannelData(int idx)
+        {
+            UInt32 d;
+            float alpha = m_page_dir_data[idx + 3];
+
+            // C# doesn't have a reinterpret_cast operator
+            unsafe
+            {
+                float* fRef = &alpha;
+                d = *(UInt32*)(fRef);
+            }
+            return new PageEntryAlphaChannelData()
+            {
+                flag = (byte)(d & 0x000000FF),
+                min = (byte)((d >> 8) & 0x000000FF),
+                max = (byte)((d >> 16) & 0x000000FF),
+            };
+        }
+
+
+        private void SetPageEntryAlphaChannelData(int idx, byte flag, byte min = 0, byte max = 0)
+        {
+            float alpha;
+            unsafe
+            {
+                UInt32 a = flag | (UInt32)(min << 8) | (UInt32)(max << 16);
+                UInt32* aRef = &a;
+                alpha = *(float*)(aRef);
+            }
+            m_page_dir_data[idx + 3] = alpha;
+        }
+
+
+        private void GPUUpdatePageTables()
+        {
+            // perform homogeneity check on all non-unmapped page table entries.
+            if (m_pt_requires_homogeneity_update)
+            {
+                for (int i = 0; i < m_page_dir_data.Length; i += 4)
+                {
+                    PageEntryAlphaChannelData page_entry_data = ExtractPageEntryAlphaChannelData(i);
+                    if (page_entry_data.flag == HOMOGENEOUS_PAGE_TABLE_ENTRY)
+                    {
+                        // if no longer considered homogeneous
+                        if ((page_entry_data.max - page_entry_data.min) > m_homogeneity_tolerance)
+                        {
+                            // at some point in some future frame, this PT entry will get mapped
+                            // in other words, just unmap it and let the LRU handle the rest.
+                            SetPageEntryAlphaChannelData(i, UNMAPPED_PAGE_TABLE_ENTRY);
+                        }
+                    }
+                    else if (page_entry_data.flag == MAPPED_PAGE_TABLE_ENTRY)
+                    {
+                        // check if this entry became homogeneous - if so, then simply set its
+                        // flag to HOMOGENEOUS and let the LRU scheme drop the corresponding
+                        // brick cache slot in some future frame if it needs to.
+                        if ((page_entry_data.max - page_entry_data.min) <= m_homogeneity_tolerance)
+                        {
+                            UpdatePageTablesHomogeneousBrick(i, page_entry_data.min, page_entry_data.max);
+                        }
+                    }
+                }
+                m_pt_requires_homogeneity_update = false;
+            }
+
+            m_page_dir.SetPixelData(m_page_dir_data, mipLevel: 0);
+            m_page_dir.Apply();
+        }
+
+
+        /// <summary>
+        ///     Updates the page table entry corresponding to the provided brick so that
+        ///     it reflects a homogeneous entry.
+        /// </summary>
+        /// <param name="brick_id">brick ID</param>
+        /// <param name="_min">brick min value (usually density)</param>
+        /// <param name="_max">brick max value (usually density)</param>
+        private void UpdatePageTablesHomogeneousBrick(UInt32 brick_id, byte _min, byte _max)
+        {
+            int idx = GetPageTableIndex(brick_id);
             // x channel has to be set to the homogeneous value
-            // on the shader side, do (page_entry.x / 255.0f) to convert to the correct value
-            m_page_dir_data[idx] = val;
-            m_page_dir_data[idx + 3] = HOMOGENEOUS_PAGE_TABLE_ENTRY;
+            // on the shader side, retrive the value directly using page_entry.x (i.e., no need for [page_entry.x / 255.0f]
+            // to convert to the correct value)
+            m_page_dir_data[idx] = ((float)_min + _max) / (2.0f * 255.0f);
+            SetPageEntryAlphaChannelData(idx, HOMOGENEOUS_PAGE_TABLE_ENTRY, _min, _max);
+        }
+
+
+        /// <summary>
+        ///     Updates the page table entry corresponding to the provided brick so that
+        ///     it reflects a homogeneous entry.
+        /// </summary>
+        /// <param name="page_dir_data_idx">index in page directory data</param>
+        /// <param name="_min">brick min value (usually density)</param>
+        /// <param name="_max">brick max value (usually density)</param>
+        private void UpdatePageTablesHomogeneousBrick(int page_dir_data_idx, byte _min, byte _max)
+        {
+            // x channel has to be set to the homogeneous value
+            // on the shader side, retrive the value directly using page_entry.x (i.e., no need for [page_entry.x / 255.0f]
+            // to convert to the correct value)
+            m_page_dir_data[page_dir_data_idx] = ((float)_min + _max) / (2.0f * 255.0f);
+            SetPageEntryAlphaChannelData(page_dir_data_idx, HOMOGENEOUS_PAGE_TABLE_ENTRY, _min, _max);
         }
 
 
@@ -1796,6 +2046,15 @@ namespace UnityCTVisualizer
                 default:
                 throw new Exception(value.ToString());
             }
+        }
+
+
+        private void OnModelHomogeneityChange(byte value)
+        {
+            if (m_homogeneity_tolerance == value)
+                return;
+            m_homogeneity_tolerance = value;
+            m_pt_requires_homogeneity_update = true;
         }
 
 

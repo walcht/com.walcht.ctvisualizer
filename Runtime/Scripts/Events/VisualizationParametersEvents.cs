@@ -37,6 +37,7 @@ namespace UnityCTVisualizer
         public static Action<INTERPOLATION> ModelInterpolationChange;
         public static Action<float> ModelSamplingQualityFactorChange;
         public static Action<float> ModelLODQualityFactorChange;
+        public static Action<byte> ModelHomogeneityToleranceChange;
 
         ////////////////////////////////
         /// Invoked by Views (UIs)
@@ -46,6 +47,7 @@ namespace UnityCTVisualizer
         public static Action<INTERPOLATION> ViewInterpolationChange;
         public static Action<float> ViewSamplingQualityFactorChange;
         public static Action<float> ViewLODQualityFactorChange;
+        public static Action<byte> ViewHomogeneityToleranceChange;
     }
 }
 

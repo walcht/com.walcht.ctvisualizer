@@ -54,13 +54,25 @@ namespace UnityCTVisualizer
             }
         }
 
-        private float m_LODQualityFactor = 2.0f;
+        private float m_LODQualityFactor = 5.0f;
         public float LODQualityFactor
         {
             get => m_LODQualityFactor; set
             {
                 m_LODQualityFactor = Mathf.Clamp(value, 0.10f, 5.0f);
                 VisualizationParametersEvents.ModelLODQualityFactorChange?.Invoke(m_LODQualityFactor);
+            }
+        }
+
+
+        private byte m_HomogeneityTolerance = 0;
+        public byte HomogeneityTolerance
+        {
+            get => m_HomogeneityTolerance;
+            set
+            {
+                m_HomogeneityTolerance = value;
+                VisualizationParametersEvents.ModelHomogeneityToleranceChange?.Invoke(m_HomogeneityTolerance);
             }
         }
 
@@ -93,11 +105,13 @@ namespace UnityCTVisualizer
 
         public void DispatchVisualizationParamsChangeEvents()
         {
-            VisualizationParametersEvents.ModelTFChange?.Invoke(m_CurrentTF, m_TransferFunctions[m_CurrentTF]);
+            if (m_TransferFunctions.ContainsKey(m_CurrentTF))
+                VisualizationParametersEvents.ModelTFChange?.Invoke(m_CurrentTF, m_TransferFunctions[m_CurrentTF]);
             VisualizationParametersEvents.ModelOpacityCutoffChange?.Invoke(m_AlphaCutoff);
             VisualizationParametersEvents.ModelInterpolationChange?.Invoke(m_Interpolation);
             VisualizationParametersEvents.ModelSamplingQualityFactorChange?.Invoke(m_SamplingQualityFactor);
             VisualizationParametersEvents.ModelLODQualityFactorChange?.Invoke(m_LODQualityFactor);
+            VisualizationParametersEvents.ModelHomogeneityToleranceChange?.Invoke(m_HomogeneityTolerance);
         }
 
         /////////////////////////////////
@@ -169,6 +183,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ViewSamplingQualityFactorChange += OnViewSamplingQualityFactorChange;
             VisualizationParametersEvents.ViewLODQualityFactorChange += OnViewLODQualityFactorChange;
             VisualizationParametersEvents.ViewInterpolationChange += OnViewInterpolationChange;
+            VisualizationParametersEvents.ViewHomogeneityToleranceChange += OnViewHomogeneityToleranceChange;
         }
 
         private void OnDisable()
@@ -178,6 +193,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ViewSamplingQualityFactorChange -= OnViewSamplingQualityFactorChange;
             VisualizationParametersEvents.ViewLODQualityFactorChange -= OnViewLODQualityFactorChange;
             VisualizationParametersEvents.ViewInterpolationChange -= OnViewInterpolationChange;
+            VisualizationParametersEvents.ViewHomogeneityToleranceChange -= OnViewHomogeneityToleranceChange;
         }
 
         private void OnViewAlphaCutoffChange(float val) => OpacityCutoff = val;
@@ -193,5 +209,8 @@ namespace UnityCTVisualizer
 
 
         private void OnViewTFChange(TF new_tf) => TransferFunction = new_tf;
+
+
+        private void OnViewHomogeneityToleranceChange(byte val) => HomogeneityTolerance = val;
     }
 }
