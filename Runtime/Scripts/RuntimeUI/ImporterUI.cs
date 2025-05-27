@@ -130,7 +130,7 @@ namespace UnityCTVisualizer
         /////////////////////////////////
         void OnImportCVDSClick()
         {
-            m_ManagerUI.RequestFilesystemEntry(FilesystemExplorerMode.CVDS);
+            m_ManagerUI.RequestFilesystemEntry(FilesystemExplorerMode.SEARCH_CVDS);
             m_ManagerUI.FilesystemExplorerEntry += OnFilesystemEntrySelection;
         }
 
@@ -247,7 +247,7 @@ namespace UnityCTVisualizer
                 m_CVDSNameInputField.textComponent.color = m_DefaultTextColor;
                 m_CVDSNameInputField.text = new DirectoryInfo(directoryPath).Name;
 
-                Debug.Log($"successfully imported CVDS metadta from: {directoryPath}");
+                Debug.Log($"successfully imported SEARCH_CVDS metadta from: {directoryPath}");
             }
             catch (Exception e)
             {
@@ -266,7 +266,7 @@ namespace UnityCTVisualizer
                 m_BrickRequestsRandomTexSize.interactable = false;
 
                 m_CVDSNameInputField.textComponent.color = Color.red;
-                Debug.LogError($"failed to import CVDS metadta from: {directoryPath}, reason: {e.Message}");
+                Debug.LogError($"failed to import SEARCH_CVDS metadta from: {directoryPath}, reason: {e.Message}");
             }
         }
 

@@ -6,6 +6,7 @@ using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using UnityD3;
 using System.Collections;
+using JetBrains.Annotations;
 
 namespace UnityCTVisualizer
 {
@@ -99,6 +100,7 @@ namespace UnityCTVisualizer
         ///////////////////////////////////////////////////////////////////////
         /// MISC
         ///////////////////////////////////////////////////////////////////////
+        private ManagerUI m_ManagerUI;
         private TagHandle m_ColorAlphaControlsTag;
         // -1 means None is selected which in turn means that we have no control points (empty list)
         private int m_CurrColorControlPointID = -1;
@@ -109,13 +111,26 @@ namespace UnityCTVisualizer
 
         private float m_PrevHistogramWidth = 0;
         private float m_PrevHistogramHeight = 0;
+        
 
 
         private void Awake()
         {
+            if (m_ManagerUI == null)
+            {
+                throw new Exception("Init has to be called before enabling this transfer function UI");
+            }
             m_ColorAlphaControlsTag = TagHandle.GetExistingTag("ColorAlphaControls");
             InitializeHistogramTex();
         }
+
+
+
+        public void Init(ManagerUI managerUI)
+        {
+            m_ManagerUI = managerUI;
+        }
+
 
 
         private void Update()
@@ -446,7 +461,7 @@ namespace UnityCTVisualizer
 
             if (m_CurrAlphaControlPointID != -1)
             {
-                // issue a request for removing the current alpha control point from the TF1D model
+                // issue a request for removing the current alpha control point from the SEARCH_TF1D model
                 TransferFunctionEvents.ViewTF1DAlphaControlRemoval?.Invoke(m_CurrAlphaControlPointID);
                 // no alpha control point is currently selected
                 UpdateCurrAlphaControlPointID(-1);
@@ -455,7 +470,7 @@ namespace UnityCTVisualizer
 
             if (m_CurrColorControlPointID != -1)
             {
-                // issue a request for removing the current alpha control point from the TF1D model
+                // issue a request for removing the current alpha control point from the SEARCH_TF1D model
                 TransferFunctionEvents.ViewTF1DColorControlRemoval?.Invoke(m_CurrColorControlPointID);
                 // no color control point is currently selected
                 UpdateCurrColorControlPointID(-1);
@@ -516,13 +531,37 @@ namespace UnityCTVisualizer
 
         void OnSave()
         {
-            m_TransferFunction.Serialize();
+            m_ManagerUI.RequestFilesystemEntry(FilesystemExplorerMode.SAVE_TF1D);
+            m_ManagerUI.FilesystemExplorerEntry += OnFilesystemExplorerSave;
+        }
+
+
+        private void OnFilesystemExplorerSave(string fp)
+        {
+            m_ManagerUI.FilesystemExplorerEntry -= OnFilesystemExplorerSave;
+            if (String.IsNullOrWhiteSpace(fp))
+            {
+                return;
+            }
+            m_TransferFunction.Serialize(fp);
         }
 
 
         void OnLoad()
         {
-            m_TransferFunction.Deserialize("TODO");
+            m_ManagerUI.RequestFilesystemEntry(FilesystemExplorerMode.SEARCH_TF1D);
+            m_ManagerUI.FilesystemExplorerEntry += OnFilesystemExplorerLoad;
+        }
+
+
+        private void OnFilesystemExplorerLoad(string fp)
+        {
+            m_ManagerUI.FilesystemExplorerEntry -= OnFilesystemExplorerLoad;
+            if (String.IsNullOrWhiteSpace(fp))
+            {
+                return;
+            }
+            m_TransferFunction.Deserialize(fp);
         }
 
 
@@ -578,7 +617,7 @@ namespace UnityCTVisualizer
             // disable whole color picker Canvas UI
             m_ColorPickerWrapper.gameObject.SetActive(false);
 
-            // make sure to re-enable TF1D interactiveness BEFORE re-selecting the control point
+            // make sure to re-enable SEARCH_TF1D interactiveness BEFORE re-selecting the control point
             EnableInteractiveness();
 
             // re-select the corresponding color control point

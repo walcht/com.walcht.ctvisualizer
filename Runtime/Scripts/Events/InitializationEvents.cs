@@ -3,7 +3,7 @@ using System;
 namespace UnityCTVisualizer {
     public static class InitializationEvents {
         /// <summary>
-        ///     Invoked when a CVDS metadata is successfully imported. The CVDSMetadata instance along with additional
+        ///     Invoked when a SEARCH_CVDS metadata is successfully imported. The CVDSMetadata instance along with additional
         ///     runtime-constant pipeline parameters and debugging parametrs that are used to create the volumetric object
         ///     are passed to the handler(s).
         /// </summary>

@@ -115,16 +115,22 @@ namespace UnityCTVisualizer
         /// <summary>
         ///     Serialized the transfer function data to persistent memory.
         /// </summary>
-        public abstract void Serialize();
+        /// 
+        /// <param name="fp">
+        ///     Absolute file path at which the transfer function is serialized. Should point to a non-existant
+        ///     file within an existant directory.
+        /// </param>
+        public abstract void Serialize(string fp);
 
 
         /// <summary>
         ///     Deserializes the transfer function data from a provided JSON filename.
         /// </summary>
         /// 
-        /// <param name="filename">
-        ///     Filename of the transfer function JSON data to deserialize.
+        /// <param name="fp">
+        ///     Absolute file path of a serialized transfer function data. Should point to
+        ///     an existant JSON file.
         /// </param>
-        public abstract void Deserialize(string filename);
+        public abstract void Deserialize(string fp);
     }
 }

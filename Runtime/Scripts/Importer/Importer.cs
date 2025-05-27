@@ -103,11 +103,11 @@ namespace UnityCTVisualizer
             string metadata_fp = Path.Join(root_fp, "metadata.json");
             if (!Directory.Exists(root_fp))
             {
-                throw new Exception($"provided CVDS directory path is not a valide directory path: {root_fp}");
+                throw new Exception($"provided SEARCH_CVDS directory path is not a valide directory path: {root_fp}");
             }
             if (!File.Exists(metadata_fp))
             {
-                throw new Exception($"metadata.json file was not found in provided CVDS directory: {root_fp}");
+                throw new Exception($"metadata.json file was not found in provided SEARCH_CVDS directory: {root_fp}");
             }
             bool deserializationError = false;
             StringBuilder error_sb = new();
@@ -242,7 +242,7 @@ namespace UnityCTVisualizer
         }
 
         /// <summary>
-        ///     The root filepath of the CVDS dataset. This is the directory containing the metadata.json file along
+        ///     The root filepath of the SEARCH_CVDS dataset. This is the directory containing the metadata.json file along
         ///     with resolution_lvl_n subfolders which containt volume chunks.
         /// </summary>
         public string RootFilepath { get; private set; }
@@ -520,11 +520,11 @@ namespace UnityCTVisualizer
 
 
         /// <summary>
-        ///     Imports the residency octree from the provided CVDS metadata.
+        ///     Imports the residency octree from the provided SEARCH_CVDS metadata.
         /// </summary>
         /// 
         /// <param name="metadata">
-        ///     CVDS metadata
+        ///     SEARCH_CVDS metadata
         /// </param>
         /// 
         /// <returns>
@@ -559,11 +559,11 @@ namespace UnityCTVisualizer
         }
 
         /// <summary>
-        ///     Imports the generated histogram from the provided CVDS metadata.
+        ///     Imports the generated histogram from the provided SEARCH_CVDS metadata.
         /// </summary>
         /// 
         /// <param name="metadata">
-        ///     CVDS metadata. histogram.bin file is expected to be resident in the root directory of this CVDS
+        ///     SEARCH_CVDS metadata. histogram.bin file is expected to be resident in the root directory of this SEARCH_CVDS
         /// </param>
         /// 
         /// <returns>

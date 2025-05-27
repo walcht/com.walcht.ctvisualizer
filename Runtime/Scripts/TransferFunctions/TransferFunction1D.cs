@@ -337,10 +337,8 @@ namespace UnityCTVisualizer
         }
 
 
-        public override void Serialize()
+        public override void Serialize(string fp)
         {
-            string fp = Path.Combine(Application.persistentDataPath, $"tf1d_{0}.json");
-
             if (File.Exists(fp))
             {
                 throw new Exception($"{Path.GetFileName(fp)} already exists in {Path.GetDirectoryName(fp)}");
@@ -383,14 +381,15 @@ namespace UnityCTVisualizer
             {
                 sw.Write(JsonConvert.SerializeObject(data));
             }
-
-            Debug.Log($"transfer function data successfully serialized at: {fp}");
         }
 
 
-        public override void Deserialize(string filename)
+        public override void Deserialize(string fp)
         {
-            string fp = Path.Combine(Application.persistentDataPath, $"tf1d_0.json");
+            if (!File.Exists(fp))
+            {
+                throw new Exception($"{Path.GetFileName(fp)} does NOT exist in {Path.GetDirectoryName(fp)}");
+            }
 
             // clear previous control points
             ClearColorControlPoints(createDefaultCp: false);

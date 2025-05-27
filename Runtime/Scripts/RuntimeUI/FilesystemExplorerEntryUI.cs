@@ -17,15 +17,15 @@ namespace UnityCTVisualizer
             m_Button.onClick.AddListener(() => clbk());
             switch (entryType)
             {
-                case FilesystemExplorerMode.CVDS:
+                case FilesystemExplorerMode.SEARCH_CVDS:
                 {
                     break;
                 }
-                case FilesystemExplorerMode.TF1D:
+                case FilesystemExplorerMode.SEARCH_TF1D:
                 {
                     break;
                 }
-                case FilesystemExplorerMode.VISUALIZATION_PARAMETERS:
+                case FilesystemExplorerMode.SEARCH_VISUALIZATION_PARAMETERS:
                 {
                     break;
                 }
