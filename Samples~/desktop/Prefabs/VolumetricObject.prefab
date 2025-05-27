@@ -12,8 +12,6 @@ GameObject:
   - component: {fileID: 7792705119133824540}
   - component: {fileID: 4154116069845246419}
   - component: {fileID: 2034905668642507873}
-  - component: {fileID: -817033717090925142}
-  - component: {fileID: 4485605312910952025}
   m_Layer: 0
   m_Name: VolumetricObject
   m_TagString: Untagged
@@ -104,36 +102,6 @@ MonoBehaviour:
   IC_MAT: {fileID: 2100000, guid: f8f0ac0f4d4338144b4b71d5929aa5f6, type: 2}
   OOC_HYBRID_MAT: {fileID: 2100000, guid: 156b48a9d180ff8418f092c2290138d8, type: 2}
   OOC_PT_MAT: {fileID: 2100000, guid: 4de6a7c3a51eecd4f9a7bc7409e3eccb, type: 2}
-  m_brick_wireframe: {fileID: 4892012301941521694, guid: 849307a6568aa3540950412a75d20762, type: 3}
+  m_BrickWireframePrefab: {fileID: 0}
   InstantiateBrickWireframes: 0
   ForceNativeTextureCreation: 0
---- !u!114 &-817033717090925142
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6524694346905046297}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5382e0c18a834ad4aaac06b2771e8eae, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  output_dir: 
---- !u!114 &4485605312910952025
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6524694346905046297}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 06559ec3fa28d1f4d931cfd92f8f30c3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  MAX_NBR_FRAMES: 4000
-  randomize_rot_axis_every_nth_frame: 1000
-  rotation_speed: 30
-  output_dir: C:\Users\walid\Desktop\chunk_size_param_stats
-  initial_scale: {x: 2, y: 2, z: 2}
