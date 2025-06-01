@@ -22,6 +22,9 @@ MonoBehaviour:
   m_Scenes:
   - m_enabled: 1
     m_path: Assets/Samples/CT Visualizer/0.0.1/XR MagicLeap2 CT Visualizer/Scenes/magicleap2scene.unity
+  - m_enabled: 0
+    m_path: Assets/Samples/Magic Leap SDK/2.6.0/ML Rig & OpenXR Input/Scenes/New
+      Scene.unity
   m_ScriptingDefines: []
   m_PlayerSettingsYaml:
     m_Settings:
@@ -172,12 +175,6 @@ MonoBehaviour:
         type: 3}'
     - line: '|   - {fileID: -944628639613478452, guid: 06190e6c28d9dd6b58728f179f0bf60a,
         type: 3}'
-    - line: '|   - {fileID: 9068113939705856834, guid: 89ee197fb3e66d58d9e7e762dc101609,
-        type: 2}'
-    - line: '|   - {fileID: 1785952809460829306, guid: cf1b7336a370969f5af64778d6f8f998,
-        type: 2}'
-    - line: '|   - {fileID: 11400000, guid: 70e0eee609309cceda4312fa7d0ffed6, type:
-        2}'
     - line: '|   metroInputSource: 0'
     - line: '|   wsaTransparentSwapchain: 0'
     - line: '|   m_HolographicPauseOnTrackingLoss: 1'
@@ -210,14 +207,14 @@ MonoBehaviour:
     - line: '|   overrideDefaultApplicationIdentifier: 0'
     - line: '|   AndroidBundleVersionCode: 1'
     - line: '|   AndroidMinSdkVersion: 29'
-    - line: '|   AndroidTargetSdkVersion: 0'
+    - line: '|   AndroidTargetSdkVersion: 29'
     - line: '|   AndroidPreferredInstallLocation: 1'
     - line: '|   aotOptions: '
     - line: '|   stripEngineCode: 1'
     - line: '|   iPhoneStrippingLevel: 0'
     - line: '|   iPhoneScriptCallOptimization: 0'
     - line: '|   ForceInternetPermission: 0'
-    - line: '|   ForceSDCardPermission: 0'
+    - line: '|   ForceSDCardPermission: 1'
     - line: '|   CreateWallpaper: 0'
     - line: '|   androidSplitApplicationBinary: 0'
     - line: '|   keepLoadedShadersAlive: 0'

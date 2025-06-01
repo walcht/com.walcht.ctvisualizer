@@ -616,7 +616,7 @@
                     "name": "IsTracked",
                     "type": "Button",
                     "id": "d48df476-c910-46a9-bfa3-1bc4c43c2974",
-                    "expectedControlType": "Button",
+                    "expectedControlType": "",
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": false
@@ -924,7 +924,7 @@
                     "name": "IsTracked",
                     "type": "Button",
                     "id": "d52f7aad-a612-4136-a9fc-833aa36c726c",
-                    "expectedControlType": "Button",
+                    "expectedControlType": "",
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": false

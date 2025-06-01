@@ -13,7 +13,6 @@ GameObject:
   - component: {fileID: 4154116069845246419}
   - component: {fileID: 2034905668642507873}
   - component: {fileID: 532344385216309912}
-  - component: {fileID: -2185339678744845871}
   - component: {fileID: -385653360298350874}
   m_Layer: 0
   m_Name: XRVolumetricObject
@@ -102,7 +101,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a77a710b3c0443afbbb7a95178b9ff2b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_brick_wireframe: {fileID: 4892012301941521694, guid: 849307a6568aa3540950412a75d20762, type: 3}
+  IC_MAT: {fileID: 2100000, guid: f8f0ac0f4d4338144b4b71d5929aa5f6, type: 2}
+  OOC_HYBRID_MAT: {fileID: 2100000, guid: 156b48a9d180ff8418f092c2290138d8, type: 2}
+  OOC_PT_MAT: {fileID: 2100000, guid: 4de6a7c3a51eecd4f9a7bc7409e3eccb, type: 2}
+  m_BrickWireframePrefab: {fileID: 0}
   InstantiateBrickWireframes: 0
   ForceNativeTextureCreation: 0
 --- !u!114 &532344385216309912
@@ -177,23 +179,6 @@ MonoBehaviour:
   m_StartingHoverFilters: []
   m_StartingSelectFilters: []
   m_StartingInteractionStrengthFilters: []
---- !u!114 &-2185339678744845871
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6524694346905046297}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3c927fa06ba54fc7e8ed34ebd4466e76, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_ScaleSpeed: 0.149
-  m_ScaleSlowDown: 1
-  m_MaxScale: 5.46
-  m_Rotate: 1
-  m_RotationSpeed: 20
 --- !u!65 &-385653360298350874
 BoxCollider:
   m_ObjectHideFlags: 0
