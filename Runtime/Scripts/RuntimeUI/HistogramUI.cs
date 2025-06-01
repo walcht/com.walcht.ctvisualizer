@@ -13,8 +13,10 @@ namespace UnityCTVisualizer
         public event Action<float, Vector2> OnHistogramZoom;
 
         private RectTransform m_RectTransform;
-        private InputAction m_UIScrollAction;
-        private InputAction m_UIPointAction;
+
+        [SerializeField]
+        InputActionReference m_UIScrollActionRef;
+
         private Camera m_ParentCanvasCam = null;
 
 
@@ -23,13 +25,6 @@ namespace UnityCTVisualizer
             m_RectTransform = GetComponent<RectTransform>();
             Canvas[] canvases = GetComponentsInParent<Canvas>();
             m_ParentCanvasCam = canvases[^1].worldCamera;
-        }
-
-
-        private void Start()
-        {
-            m_UIScrollAction = InputSystem.actions.FindAction("ScrollWheel", throwIfNotFound: true);
-            m_UIPointAction = InputSystem.actions.FindAction("Point", throwIfNotFound: true);
         }
 
 
@@ -54,28 +49,21 @@ namespace UnityCTVisualizer
         }
 
 
-        public void OnPointerEnter(PointerEventData eventData) => m_UIScrollAction.performed += OnScroll;
+        public void OnPointerEnter(PointerEventData eventData) => m_UIScrollActionRef.action.performed += OnScroll;
 
 
-        public void OnPointerExit(PointerEventData eventData) => m_UIScrollAction.performed -= OnScroll;
+        public void OnPointerExit(PointerEventData eventData) => m_UIScrollActionRef.action.performed -= OnScroll;
 
 
         private void OnScroll(InputAction.CallbackContext context)
         {
-            var pointer = m_UIPointAction.ReadValue<Vector2>();
             var scroll = context.ReadValue<Vector2>();
 
             // ignore "non-scroll" emitted events. y component takes the values: {+1, 0, -1}
             if (scroll.y == 0)
                 return;
 
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                m_RectTransform,
-                pointer,
-                m_ParentCanvasCam,
-                out Vector2 _tmp
-            );
-            Vector2 rectLocalPos = new(_tmp.x / m_RectTransform.rect.width, _tmp.y / m_RectTransform.rect.height);
+            Vector2 rectLocalPos = new(0, 0);
             OnHistogramZoom?.Invoke(scroll.y, rectLocalPos);
         }
     }

@@ -6,13 +6,9 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using TextureSubPlugin;
-using UnityEditor.Build.Content;
 using UnityEngine;
 using UnityEngine.Assertions;
 using UnityEngine.Rendering;
-#if (UNITY_ANDROID && !UNITY_EDITOR)
-using UnityEngine.Android;
-#endif
 
 namespace UnityCTVisualizer
 {
@@ -245,14 +241,6 @@ namespace UnityCTVisualizer
         private void Awake()
         {
             m_transform = GetComponent<Transform>();
-#if (UNITY_ANDROID && !UNITY_EDITOR)
-            var callbacks = new PermissionCallbacks();
-            callbacks.PermissionDenied += PermissionCallbacks_PermissionDenied;
-            callbacks.PermissionGranted += PermissionCallbacks_PermissionGranted;
-            // request permissions
-            if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
-                Permission.RequestUserPermission(Permission.ExternalStorageRead);
-#endif
         }
 
 
@@ -328,16 +316,6 @@ namespace UnityCTVisualizer
             InstantiateBrickWireframes = debuggingParams.BrickWireframes;
             if (debuggingParams.Benchmark)
             {
-                // request write permission on Android
-#if (UNITY_ANDROID && !UNITY_EDITOR)
-                var callbacks = new PermissionCallbacks();
-                callbacks.PermissionDenied += PermissionCallbacks_PermissionDenied;
-                callbacks.PermissionGranted += PermissionCallbacks_PermissionGranted;
-                // request permissions
-                if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageWrite))
-                    Permission.RequestUserPermission(Permission.ExternalStorageWrite);
-#endif
-
                 switch (pipelineParams.RenderingMode)
                 {
                     case RenderingMode.OOC_PT:
@@ -2069,19 +2047,5 @@ namespace UnityCTVisualizer
             yield return new WaitUntil(() => m_brick_cache != null);
             clbk();
         }
-
-
-#if (UNITY_ANDROID && !UNITY_EDITOR)
-        internal void PermissionCallbacks_PermissionGranted(string permissionName)
-        {
-            Debug.Log("permission to read from the file system was granted");
-        }
-
-
-        internal void PermissionCallbacks_PermissionDenied(string permissionName)
-        {
-            throw new Exception($"permission to read from the file system was NOT granted. Aborting ...");
-        }
-#endif
     }
 }

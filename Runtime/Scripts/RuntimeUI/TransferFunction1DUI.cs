@@ -6,7 +6,6 @@ using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using UnityD3;
 using System.Collections;
-using JetBrains.Annotations;
 
 namespace UnityCTVisualizer
 {
@@ -116,10 +115,6 @@ namespace UnityCTVisualizer
 
         private void Awake()
         {
-            if (m_ManagerUI == null)
-            {
-                throw new Exception("Init has to be called before enabling this transfer function UI");
-            }
             m_ColorAlphaControlsTag = TagHandle.GetExistingTag("ColorAlphaControls");
             InitializeHistogramTex();
         }
@@ -131,6 +126,14 @@ namespace UnityCTVisualizer
             m_ManagerUI = managerUI;
         }
 
+
+        private void Start()
+        {
+            if (m_ManagerUI == null)
+            {
+                throw new Exception("Init has to be called before enabling this transfer function UI");
+            }
+        }
 
 
         private void Update()

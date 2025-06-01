@@ -80,11 +80,6 @@ namespace UnityCTVisualizer
 
         void OnEnable()
         {
-            if (m_ManagerUI == null)
-            {
-                throw new Exception("Init has to be called before enabling this Importer UI");
-            }
-
             // make sure that initially the progress handler is disabled
             m_ProgressHandler.gameObject.SetActive(false);
 
@@ -103,6 +98,10 @@ namespace UnityCTVisualizer
 
         private void Start()
         {
+            if (m_ManagerUI == null)
+            {
+                throw new Exception("Init has to be called before enabling this Importer UI");
+            }
             m_RandomSeedToggle.onValueChanged.Invoke(m_RandomSeedToggle.isOn);
         }
 
