@@ -1,6 +1,18 @@
 #define BOUNDING_BOX_LONGEST_SEGMENT 1.732050808f  // diagonal of a cube
 #pragma once
 
+inline float3 viewToObjectDir(in float3 dir) {
+    return normalize(mul((float3x3)unity_WorldToObject, mul((float3x3)UNITY_MATRIX_I_V, dir)));
+}
+
+inline float3 viewToObjectNorm(in float3 norm) {
+    return normalize(mul(mul((float3x3)UNITY_MATRIX_I_V, norm), (float3x3)unity_ObjectToWorld));
+}
+
+inline float3 viewToObjectPos(in float3 pos) {
+    return mul(unity_WorldToObject, mul(UNITY_MATRIX_I_V, float4(pos, 1.0))).xyz;
+}
+
 /// <summary>
 ///   Parametric description of a ray: r = origin + t * direction
 /// </summary>
@@ -41,6 +53,22 @@ float slabs(float3 origin, float3 dir, Box b) {
     float3 tmax = max(t0, t1);
     float t_out = min(min(tmax.x, tmax.y), tmax.z);
     return t_out;
+}
+
+
+/// <summary>
+///     Computes the ray-plane intersection by returning the parametric distance
+///     along the ray up-to the intersection point. All supplied vectors should
+///     be in the same coordinate system.
+/// </summary>
+///
+/// <remark>
+///     Since this is expected to be used in the context of ray marching, there
+///     is no reason to add checks for null denominator (i.e., ray coincides with
+///     the camera's near plane).
+/// </remark>
+inline float intersectNearPlane(float3 rayOrigin, float3 rayDir, float3 planePoint, float3 planeNormal) {
+    return dot(planePoint - rayOrigin, planeNormal) / dot(rayDir, planeNormal);
 }
 
 ///
@@ -88,8 +116,14 @@ Ray getRayFromBackface(float3 modelVertex) {
     // t_out corresponds to the volume's AABB exit point but the exit point may
     // be reached earlier if the camera is inside the volume.
     // t_frust_out corresponds to the frustrum exit
-    float t_frust_out = 
-      -(ray_origin_viewspace.z + _ProjectionParams.y) / ray_dir_viewspace.z;
+    //
+    // x = 1 or -1 (-1 if projection is flipped)
+    // y = near plane
+    // z = far plane
+    // w = 1/far plane
+    // uniform vec4 _ProjectionParams;
+    float t_frust_out = intersectNearPlane(modelVertex, ray.dir, viewToObjectPos(float3(0, 0, -_ProjectionParams.y)), viewToObjectNorm(float3(0, 0, 1)));
+
     ray.t_out = min(ray.t_out, t_frust_out);
 
     return ray;
