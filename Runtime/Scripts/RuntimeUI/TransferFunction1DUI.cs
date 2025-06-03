@@ -83,15 +83,15 @@ namespace UnityCTVisualizer
         ///////////////////////////////////////////////////////////////////////
         /// DIRTY FLAGS
         ///////////////////////////////////////////////////////////////////////
-        private bool m_DirtyHistogramTex = false;
-        private bool m_DirtyAlphaCps = false;
+        private bool m_DirtyHistogramTex = true;
+        private bool m_DirtyAlphaCps = true;
 
 
         ///////////////////////////////////////////////////////////////////////
         /// HISTOGRAM-RELATED
         ///////////////////////////////////////////////////////////////////////
         private Texture2D m_HistogramTex;
-        private UInt64[] m_OriginalHistogramData;
+        private UInt64[] m_OriginalHistogramData = new UInt64[] { };
         private const int m_HistogramTexWidth = 256;
         private UInt16[] m_HistogramTexData;
 
@@ -110,7 +110,7 @@ namespace UnityCTVisualizer
 
         private float m_PrevHistogramWidth = 0;
         private float m_PrevHistogramHeight = 0;
-        
+
 
 
         private void Awake()
@@ -659,7 +659,8 @@ namespace UnityCTVisualizer
         }
 
 
-        void OnModelTFChange(TF new_tf, ITransferFunction tf) {
+        void OnModelTFChange(TF new_tf, ITransferFunction tf)
+        {
             // TODO: handle multiple TFs - this is a questionable feature to add
             if (m_TransferFunction != null)
             {
