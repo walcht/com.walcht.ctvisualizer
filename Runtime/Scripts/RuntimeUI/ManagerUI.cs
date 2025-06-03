@@ -26,6 +26,7 @@ namespace UnityCTVisualizer
             m_ImporterUI.Init(this);
             m_TransferFunction1DUI.Init(this);
             m_TransferFunction1DUI.gameObject.SetActive(true);
+            m_VisualizationParamsUI.Init(this);
             m_VisualizationParamsUI.gameObject.SetActive(true);
             m_ProgressHandlerUI.gameObject.SetActive(false);
             m_FilesystemExplorerUI.gameObject.SetActive(false);

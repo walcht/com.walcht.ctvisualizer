@@ -142,13 +142,26 @@ namespace UnityCTVisualizer
                 case FilesystemExplorerMode.SEARCH_VISUALIZATION_PARAMETERS:
                 {
                     HideSaveModeUIs();
-                    // TODO
+                    foreach (string fp in Directory.EnumerateFiles(Application.persistentDataPath, "visualization_parameters_*.json"))
+                    {
+                        var obj = Instantiate<GameObject>(m_FilesystemEntry, parent: m_EntriesContainer);
+                        m_Entries.Add(obj);
+                        obj.GetComponent<FilesystemExplorerEntry>().Init(Path.GetFileNameWithoutExtension(fp), mode,
+                            () => OnFilesystemEntryClick(fp));
+                    }
                     break;
                 }
                 case FilesystemExplorerMode.SAVE_TF1D:
                 {
                     ShowSaveModeUIs();
                     m_SaveFilenameConstantPartPre.text = "tf1d_";
+                    m_SaveFilenameConstantPartSuf.text = ".json";
+                    break;
+                }
+                case FilesystemExplorerMode.SAVE_VISUALIZATION_PARAMETERS:
+                {
+                    ShowSaveModeUIs();
+                    m_SaveFilenameConstantPartPre.text = "visualization_parameters_";
                     m_SaveFilenameConstantPartSuf.text = ".json";
                     break;
                 }
