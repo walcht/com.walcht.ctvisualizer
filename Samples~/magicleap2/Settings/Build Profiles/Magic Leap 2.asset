@@ -22,9 +22,6 @@ MonoBehaviour:
   m_Scenes:
   - m_enabled: 1
     m_path: Assets/Samples/CT Visualizer/0.0.1/XR MagicLeap2 CT Visualizer/Scenes/magicleap2scene.unity
-  - m_enabled: 0
-    m_path: Assets/Samples/Magic Leap SDK/2.6.0/ML Rig & OpenXR Input/Scenes/New
-      Scene.unity
   m_ScriptingDefines: []
   m_PlayerSettingsYaml:
     m_Settings:
@@ -171,8 +168,7 @@ MonoBehaviour:
     - line: '|   bundleVersion: 0.1.0'
     - line: '|   preloadedAssets:'
     - line: '|   - {instanceID: 0}'
-    - line: '|   - {fileID: -944628639613478452, guid: 289c1b55c9541489481df5cc06664110,
-        type: 3}'
+    - line: '|   - {instanceID: 0}'
     - line: '|   - {fileID: -944628639613478452, guid: 06190e6c28d9dd6b58728f179f0bf60a,
         type: 3}'
     - line: '|   metroInputSource: 0'
