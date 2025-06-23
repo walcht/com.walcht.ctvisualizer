@@ -5,92 +5,82 @@ using UnityEngine;
 
 namespace UnityCTVisualizer
 {
-    public class ICBenchmarkSetup : MonoBehaviour
+    /// <summary>
+    ///     Initializes a benchmarking setup for an in-core volumetric visualization
+    ///     and stores various performance metrics in:
+    ///         <code> Application.persistenPath/ic_benchmarks_{time}.json</code>
+    /// </summary>
+    public class ICBenchmarkSetup : BenchmarkingCommon
     {
-
-        private class InCoreBenchmarking
-        {
-            public float[] FrameTimes;
-            public double BricksLoadingTimeToCPUCache;
-            public double BricksLoadingTimeToGPUCache;
-            public long NbrBricks;
-        }
-
-
-        public long MAX_NBR_FRAMES = 5000;
-        public int randomize_rot_axis_every_nth_frame = 500;
+        public int m_MaxNbrFrames = 2048;
+        public int randomize_rot_axis_every_nth_frame = 200;
         public float rotation_speed = 30.0f;
-        public string output_dir;
-        public Vector3 initial_scale = Vector3.one;
 
-        private long nbr_frames = 0;
-        bool done = false;
-
-        private InCoreBenchmarking m_InCoreBenchmarking;
-
-
-        private Vector3 m_rotation_axis;
-
-        private void OnEnable()
-        {
-            m_InCoreBenchmarking = new InCoreBenchmarking()
-            {
-                FrameTimes = new float[MAX_NBR_FRAMES]
-            };
-
-            VolumetricObject.OnInCoreAllBricksLoadedToCPUCache += OnAllBricksUploadedToCPUCache;
-            VolumetricObject.OnInCoreAllBricksLoadedToGPUCache += OnAllBricksUploadedToGPUCache;
-        }
-
-        private void OnDisable()
-        {
-            VolumetricObject.OnInCoreAllBricksLoadedToCPUCache -= OnAllBricksUploadedToCPUCache;
-            VolumetricObject.OnInCoreAllBricksLoadedToGPUCache -= OnAllBricksUploadedToGPUCache;
-        }
+        private long m_NbrFrames = 0;
+        private bool m_Done = false;
+        private Vector3 m_RotationAxis;
 
         private void Start()
         {
+#if DEBUG
             Debug.Log("started in-core DVR benchmarking ...");
-            transform.localScale = initial_scale;
+#endif
+            InitializeVisualizationParameters();
         }
 
-        // Update is called once per frame
         void Update()
         {
-            if (!done)
+            if (!m_Done)
             {
-                transform.Rotate(m_rotation_axis, rotation_speed * Time.deltaTime, Space.Self);
+                transform.Rotate(m_RotationAxis, rotation_speed * Time.deltaTime, Space.Self);
                 Benchmark();
             }
         }
 
         void Benchmark()
         {
-            if (nbr_frames >= MAX_NBR_FRAMES)
+            if (m_NbrFrames >= m_MaxNbrFrames)
             {
-                done = true;
+                m_Done = true;
 
-                string fp = Path.Join(output_dir, $"incore_benchmarks_{DateTimeOffset.Now.ToUnixTimeMilliseconds()}.json");
+                // set the pipeline parameters
+                m_BenchmarkStats.PipelineParameters = GetComponent<VolumetricObject>().GetPipelineParams();
+
+                // set screen resolution parameters
+                m_BenchmarkStats.ScreenWidth = Screen.width;
+                m_BenchmarkStats.ScreenHeight = Screen.height;
+
+                m_BenchmarkStats.DatasetMetadata = GetComponent<VolumetricObject>().GetVolumetricDataset().Metadata.GetInternalMetadata();
+
+                string fp = Path.Join(Application.persistentDataPath, $"ic_benchmarks_{DateTimeOffset.Now.ToUnixTimeMilliseconds()}.json");
                 using (StreamWriter sw = File.CreateText(fp))
                 {
                     JsonSerializer serializer = new()
                     {
                         Formatting = Formatting.Indented
                     };
-                    serializer.Serialize(sw, m_InCoreBenchmarking);
+                    serializer.Serialize(sw, m_BenchmarkStats);
                 }
+#if DEBUG
                 Debug.Log($"benchmarking saved at {fp}");
+#endif
 
                 return;
             }
 
-            if (nbr_frames % randomize_rot_axis_every_nth_frame == 0)
+            if (m_NbrFrames % randomize_rot_axis_every_nth_frame == 0)
             {
+                m_BenchmarkStats.Events.Add(new()
+                {
+                    Timestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds(),
+                    Type = BenchmarkingEventType.NEW_RANDOM_ROTATION_AXIS,
+                });
                 RandomizeRotationAxis();
             }
 
-            m_InCoreBenchmarking.FrameTimes[nbr_frames] = Time.unscaledDeltaTime * 1000;
-            ++nbr_frames;
+            m_BenchmarkStats.Timestamps.Add(DateTimeOffset.Now.ToUnixTimeMilliseconds());
+            m_BenchmarkStats.FrameTimes.Add(Time.unscaledDeltaTime * 1000);
+            ++m_NbrFrames;
         }
 
         void RandomizeRotationAxis()
@@ -98,26 +88,11 @@ namespace UnityCTVisualizer
             // choose a random rotation axis
             float lat = Mathf.Acos(2 * UnityEngine.Random.value - 1) - Mathf.PI / 2.0f;
             float lon = 2 * Mathf.PI * UnityEngine.Random.value;
-            m_rotation_axis = new Vector3(
+            m_RotationAxis = new Vector3(
                 Mathf.Cos(lat) * Mathf.Cos(lon),
                 Mathf.Cos(lat) * Mathf.Sin(lon),
                 Mathf.Sin(lat)
             );
         }
-
-        void OnAllBricksUploadedToCPUCache(float time_ms, long nbr_bricks)
-        {
-            m_InCoreBenchmarking.BricksLoadingTimeToCPUCache = time_ms;
-            VolumetricObject.OnInCoreAllBricksLoadedToCPUCache -= OnAllBricksUploadedToCPUCache;
-            m_InCoreBenchmarking.NbrBricks = nbr_bricks;
-        }
-
-        void OnAllBricksUploadedToGPUCache(float time_ms, long nbr_bricks)
-        {
-            m_InCoreBenchmarking.BricksLoadingTimeToGPUCache = time_ms;
-            VolumetricObject.OnInCoreAllBricksLoadedToGPUCache -= OnAllBricksUploadedToGPUCache;
-            m_InCoreBenchmarking.NbrBricks = nbr_bricks;
-        }
-
     }
 }

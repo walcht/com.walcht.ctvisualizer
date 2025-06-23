@@ -38,65 +38,69 @@ namespace UnityCTVisualizer
     }
 
 
+    [Serializable]
+    public class CVDSMetadataInternal
+    {
+        [JsonProperty("original_dims")]
+        public int[] OriginalDims { get; set; }
+
+        [JsonProperty("chunk_size")]
+        public int ChunkSize { get; set; }
+
+        [JsonProperty("nbr_chunks_per_resolution_lvl")]
+        public int[][] NbrChunksPerResolutionLvl { get; set; }
+
+        [JsonProperty("total_nbr_chunks")]
+        public int[] TotalNbrChunks { get; set; }
+
+        [JsonProperty("nbr_resolution_lvls")]
+        public int NbrResolutionLvls { get; set; }
+
+        [JsonProperty("downsampling_inter")]
+        public string DownsamplingInter { get; set; }
+
+        [JsonProperty("color_depth")]
+        public int ColorDepth { get; set; }
+
+        [JsonProperty("force_8bit_conversion")]
+        public bool ConvertedToUInt8 { get; set; }
+
+        [JsonProperty("lz4_compressed")]
+        public bool Lz4Compressed { get; set; }
+
+        [JsonProperty("decompressed_chunk_size_in_bytes")]
+        public long DecompressedChunkSizeInBytes { get; set; }
+
+        [JsonProperty("vdhms")]
+        public double[][] VDHMs { get; set; }
+
+        [JsonProperty("octree_nrb_nodes")]
+        public long OctreeNbrNodes { get; set; }
+
+        [JsonProperty("octree_max_depth")]
+        public int OctreeMaxDepth { get; set; }
+
+        [JsonProperty("octree_smallest_subdivision")]
+        public float[] OctreeSmallestSubdivision { get; set; }
+
+        [JsonProperty("octree_size_in_bytes")]
+        public long OctreeSizeInBytes { get; set; }
+
+        [JsonProperty("histogram_nbr_bins")]
+        public int HistogramNbrBins { get; set; }
+
+        [JsonProperty("voxel_dims")]
+        public float[] VoxelDims { get; set; }
+
+        [JsonProperty("euler_rotation")]
+        public float[] EulerRotation { get; set; }
+    }
+
+
     public class CVDSMetadata
     {
-
-        internal class CVDSMetadataInternal
-        {
-            [JsonProperty("original_dims")]
-            public int[] OriginalDims { get; set; }
-
-            [JsonProperty("chunk_size")]
-            public int ChunkSize { get; set; }
-
-            [JsonProperty("nbr_chunks_per_resolution_lvl")]
-            public int[][] NbrChunksPerResolutionLvl { get; set; }
-
-            [JsonProperty("total_nbr_chunks")]
-            public int[] TotalNbrChunks { get; set; }
-
-            [JsonProperty("nbr_resolution_lvls")]
-            public int NbrResolutionLvls { get; set; }
-
-            [JsonProperty("downsampling_inter")]
-            public string DownsamplingInter { get; set; }
-
-            [JsonProperty("color_depth")]
-            public int ColorDepth { get; set; }
-
-            [JsonProperty("force_8bit_conversion")]
-            public bool ConvertedToUInt8 { get; set; }
-
-            [JsonProperty("lz4_compressed")]
-            public bool Lz4Compressed { get; set; }
-
-            [JsonProperty("decompressed_chunk_size_in_bytes")]
-            public long DecompressedChunkSizeInBytes { get; set; }
-
-            [JsonProperty("vdhms")]
-            public double[][] VDHMs { get; set; }
-
-            [JsonProperty("octree_nrb_nodes")]
-            public long OctreeNbrNodes { get; set; }
-
-            [JsonProperty("octree_max_depth")]
-            public int OctreeMaxDepth { get; set; }
-
-            [JsonProperty("octree_smallest_subdivision")]
-            public float[] OctreeSmallestSubdivision { get; set; }
-
-            [JsonProperty("octree_size_in_bytes")]
-            public long OctreeSizeInBytes { get; set; }
-
-            [JsonProperty("histogram_nbr_bins")]
-            public int HistogramNbrBins { get; set; }
-
-            [JsonProperty("voxel_dims")]
-            public float[] VoxelDims { get; set; }
-
-            [JsonProperty("euler_rotation")]
-            public float[] EulerRotation { get; set; }
-        }
+        private readonly CVDSMetadataInternal m_InternalMetadata;
+        public CVDSMetadataInternal GetInternalMetadata() => m_InternalMetadata;
 
         public CVDSMetadata(string root_fp)
         {
@@ -239,6 +243,7 @@ namespace UnityCTVisualizer
             // set histogram properties
             HistogramNbrBins = metadata.HistogramNbrBins;
 
+            m_InternalMetadata = metadata;
         }
 
         /// <summary>

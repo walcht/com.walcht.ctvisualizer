@@ -49,3 +49,7 @@ libTextureSubPlugin.so.meta
 # generated files
 MagicLeapOpenXRInput.cs
 MagicLeapOpenXRInput.cs.meta
+
+# Byte-compiled / optimized / DLL files
+Benchmarking/__pycache__/
+Benchmarking/*.meta

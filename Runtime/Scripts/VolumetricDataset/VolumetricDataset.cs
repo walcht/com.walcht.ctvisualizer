@@ -7,6 +7,8 @@ using UnityEngine;
 namespace UnityCTVisualizer
 {
 
+    // TODO: remove or clean this up. This is not needed.
+
     /// <summary>
     ///     Serializable wrapper around a volumetric dataset and its visualization parameters.
     /// </summary>
@@ -23,14 +25,6 @@ namespace UnityCTVisualizer
     )]
     public class VolumetricDataset : ScriptableObject
     {
-
-        /////////////////////////////////
-        // CONSTANTS
-        /////////////////////////////////
-        public readonly long MIN_BRICK_SIZE = (long)Math.Pow(32, 3);
-        public readonly long MAX_BRICK_SIZE = (long)Math.Pow(128, 3);
-        public readonly long MAX_BRICKS_CACHE_NBR_BRICKS = 32768; // == 2048^3 / 32^3
-
         /////////////////////////////////
         // VISUALIZATION PARAMETERS
         /////////////////////////////////

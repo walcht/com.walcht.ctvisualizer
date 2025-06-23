@@ -77,6 +77,7 @@ Shader "UnityCTVisualizer/ic_dvr_shader"
 
                 // start from epsilon to avoid out-of-volume rendering artifacts due to
                 // floating point precision
+                [loop]
                 for (float t = epsilon; t < ray.t_out; t += step_size)
                 {
                     float3 accm_ray = ray.origin + ray.dir * t;

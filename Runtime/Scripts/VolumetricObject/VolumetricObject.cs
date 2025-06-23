@@ -98,6 +98,8 @@ namespace UnityCTVisualizer
 
 
         private VolumetricDataset m_volume_dataset = null;
+        public VolumetricDataset GetVolumetricDataset() => m_volume_dataset;
+
         private ITransferFunction m_transfer_function = null;
 
         /////////////////////////////////
@@ -269,6 +271,7 @@ namespace UnityCTVisualizer
         private float m_lod_quality_factor;
         private byte m_homogeneity_tolerance;
 
+        private bool m_IsAlreadyInitialized = false;
 
 
         private void Awake()
@@ -327,12 +330,9 @@ namespace UnityCTVisualizer
         }
 
 
-        private bool initialized = false;
-
-
         public void Init(VolumetricDataset volumetricDataset, PipelineParams pipelineParams, DebugginParams debuggingParams)
         {
-            if (initialized)
+            if (m_IsAlreadyInitialized)
                 throw new Exception("volumetric object is already initialized! Use a new instance instead.");
 
             if (volumetricDataset == null)
@@ -365,6 +365,10 @@ namespace UnityCTVisualizer
                     }
                 }
             }
+            if (debuggingParams.RandomSeedValid)
+            {
+                UnityEngine.Random.InitState(debuggingParams.RandomSeed);
+            }
 
             m_cpu_cache = new MemoryCache<byte>(pipelineParams.CPUBrickCacheSizeMBs, m_brick_size_cubed);
 
@@ -394,14 +398,21 @@ namespace UnityCTVisualizer
 
                         stopwatch.Stop();
                         float elapsed = stopwatch.ElapsedMilliseconds;
+#if DEBUG
                         Debug.Log($"uploading to host memory cache took: {elapsed / 1000.0f}s");
+#endif
                         long total_nbr_bricks = m_metadata.NbrChunksPerResolutionLvl[m_PipelineParams.InCoreMaxResolutionLvl].x *
                             m_metadata.NbrChunksPerResolutionLvl[m_PipelineParams.InCoreMaxResolutionLvl].y *
                             m_metadata.NbrChunksPerResolutionLvl[m_PipelineParams.InCoreMaxResolutionLvl].z *
                             (int)Math.Pow(m_metadata.ChunkSize / m_brick_size, 3);
                         OnInCoreAllBricksLoadedToCPUCache?.Invoke(elapsed, total_nbr_bricks);
                     });
-                t.ContinueWith(t => { Debug.LogException(t.Exception); }, TaskContinuationOptions.OnlyOnFaulted);
+                t.ContinueWith(t =>
+                {
+#if DEBUG
+                    Debug.LogException(t.Exception);
+#endif
+                }, TaskContinuationOptions.OnlyOnFaulted);
 
                 // set remaning shader properties
                 float max_volume_dims = Mathf.Max(m_metadata.Dims.x, m_metadata.Dims.y, m_metadata.Dims.z);
@@ -468,12 +479,13 @@ namespace UnityCTVisualizer
             m_brick_cache_size_mb = (m_gpu_brick_cache_size.x / 1024.0f) * (m_gpu_brick_cache_size.y / 1024.0f)
                 * m_gpu_brick_cache_size.z;
 
+#if DEBUG
             // log useful info
             Debug.Log($"rendering mode set to: {m_rendering_mode}");
             Debug.Log($"number of frames in flight: {QualitySettings.maxQueuedFrames}");
             Debug.Log($"brick cache size dimensions: {m_gpu_brick_cache_size}");
             Debug.Log($"brick cache size: {m_brick_cache_size_mb}MB");
-
+#endif
             // initialize object pools
             m_tex_params_pool = new(m_PipelineParams.MaxNbrGPUBrickUploadsPerFrame);
 
@@ -485,7 +497,18 @@ namespace UnityCTVisualizer
 
             StartCoroutine(InternalInit());
 
-            initialized = true;
+            m_IsAlreadyInitialized = true;
+        }
+
+
+        public PipelineParams GetPipelineParams()
+        {
+            if (!m_IsAlreadyInitialized)
+            {
+                throw new Exception("attempt at retrieving pipeline parameters before they are set");
+            }
+
+            return m_PipelineParams;
         }
 
 
@@ -566,8 +589,9 @@ namespace UnityCTVisualizer
             Graphics.SetRandomWriteTarget(1, m_brick_requests_cb, true);
 
             GPUResetBrickRequests();
-
+#if DEBUG
             Debug.Log("brick requests buffer successfully initialized");
+#endif
         }
 
 
@@ -595,10 +619,11 @@ namespace UnityCTVisualizer
             m_material.SetBuffer(SHADER_BRICK_CACHE_USAGE_ID, m_brick_cache_usage_cb);
             Graphics.SetRandomWriteTarget(2, m_brick_cache_usage_cb, true);
             GPUResetBrickCacheUsage();
-
+#if DEBUG
             Debug.Log($"brick cache usage buffer elements count: {brick_cache_usage_size}");
             Debug.Log($"brick cache usage size: {brick_cache_usage_size * sizeof(Int32) / 1024.0f} KB");
             Debug.Log("brick cache usage successfully initialized");
+#endif
         }
 
 
@@ -618,10 +643,11 @@ namespace UnityCTVisualizer
             m_material.SetInteger(SHADER_OCTREE_MAX_DEPTH_ID, m_PipelineParams.OctreeMaxDepth);
 
             GPUUpdateResidencyOctree(new List<BrickCacheUsage>(), new List<BrickCacheUsage>());
-
+#if DEBUG
             Debug.Log($"residency octree node struct size: {Marshal.SizeOf<ResidencyNode>()} bytes");
             Debug.Log($"max residency octree depth: {m_PipelineParams.OctreeMaxDepth}");
             Debug.Log("residency octree loaded successfully");
+#endif
         }
 
 
@@ -646,8 +672,9 @@ namespace UnityCTVisualizer
             }
             m_brick_requests_random_tex.SetPixelData(m_brick_requests_random_tex_data, 0);
             m_brick_requests_random_tex.Apply();
-
+#if DEBUG
             Debug.Log("brick requests random texture successfully initialized");
+#endif
         }
 
 
@@ -685,10 +712,10 @@ namespace UnityCTVisualizer
 
             // initialize CPU-side page table(s) data
             int page_dir_data_size = page_dir_dims.x * page_dir_dims.y * page_dir_dims.z * 4;
-
+#if DEBUG
             Debug.Log($"page dir [x, y, z]: [{page_dir_dims.x}, {page_dir_dims.y}, {page_dir_dims.z}]");
-            Debug.Log($"page dir total number of pages: {page_dir_dims.x * page_dir_dims.y * page_dir_dims.z}");
-
+            Debug.Log($"page dir total number of page entries: {page_dir_dims.x * page_dir_dims.y * page_dir_dims.z}");
+#endif
             m_page_dir_data = new float[page_dir_data_size];
             // set the alpha components to UNMAPPED
             for (int i = 0; i < page_dir_data_size; i += 4)
@@ -777,13 +804,13 @@ namespace UnityCTVisualizer
 
         private IEnumerator InternalInit()
         {
-
+#if DEBUG
             Debug.Log("VolumetricObject: waiting for volume dataset and transfer function to be non null ...");
-
+#endif
             yield return new WaitUntil(() => (m_volume_dataset != null) && (m_transfer_function != null));
-
+#if DEBUG
             Debug.Log("VolumetricObject: started internal init");
-
+#endif
             // create the brick cache texture(s) natively in case of OpenGL/Vulkan to overcome
             // the 2GBs Unity/.NET Texture3D size limit. For Direct3D11/12 we don't have to create the textures
             // using the native plugin since these APIs already impose a 2GBs per-resource limit
@@ -792,13 +819,17 @@ namespace UnityCTVisualizer
             // and you try to visualize some uninitailized blocks you might observe some artifacts (duh?!)
             if (ForceNativeTextureCreation)
             {
+#if DEBUG
                 Debug.Log("forcing native 3D texture creation");
+#endif
                 yield return CreateNativeBrickCacheTexture3D();
             }
             else if (m_brick_cache_size_mb < 2048)
             {
-                Debug.Log($"requested brick cache size{m_brick_cache_size_mb}MB is less than 2GB."
+#if DEBUG
+                Debug.Log($"requested brick cache size {m_brick_cache_size_mb}MB is less than 2GB."
                     + " Using Unity's API to create the 3D texture");
+#endif
                 CreateBrickCacheTexture3D();
             }
             else
@@ -895,7 +926,9 @@ namespace UnityCTVisualizer
                 && (m_brick_cache != null));
 
             System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
+#if DEBUG
             Debug.Log("started loading all volume bricks into GPU ...");
+#endif
 
             long nbr_bricks_uploaded = 0;
 
@@ -1006,7 +1039,9 @@ namespace UnityCTVisualizer
             }  // END WHILE
 
             float elapsed = stopwatch.ElapsedMilliseconds;
+#if DEBUG
             Debug.Log($"uploading all {total_nbr_bricks} bricks to GPU took: {elapsed / 1000.0f}s");
+#endif
             OnInCoreAllBricksLoadedToGPUCache?.Invoke(elapsed, total_nbr_bricks);
 
             while (true)
@@ -1144,7 +1179,12 @@ namespace UnityCTVisualizer
                     m_brick_reply_queue.Enqueue(brick_ids[i]);
                 });
             });
-            t.ContinueWith(t => { Debug.LogException(t.Exception); }, TaskContinuationOptions.OnlyOnFaulted);
+            t.ContinueWith(t =>
+            {
+#if DEBUG
+                Debug.LogException(t.Exception);
+#endif
+            }, TaskContinuationOptions.OnlyOnFaulted);
         }
 
 
@@ -1157,8 +1197,9 @@ namespace UnityCTVisualizer
             // make sure to only start when all dependencies are initialized
             yield return new WaitUntil(() => (m_volume_dataset != null) && (m_transfer_function != null)
                 && (m_brick_cache != null));
-
+#if DEBUG
             Debug.Log("[OOC PT] started handling GPU brick requests");
+#endif
 
             long nbr_bricks_uploaded = 0;
             int nbr_bricks_uploaded_per_frame = 0;
@@ -1207,15 +1248,6 @@ namespace UnityCTVisualizer
                 {
                     m_in_flight_brick_imports.TryRemove(brick_id, out byte _);
 
-                    // TODO: remove if check
-                    // this should NEVER enter
-                    var page_entry_data = ExtractPageEntryAlphaChannelData(GetPageTableIndex(brick_id));
-                    if (page_entry_data.flag != PageEntryFlag.UNMAPPED_PAGE_TABLE_ENTRY)
-                    {
-                        Debug.LogError($"{brick_id} already in PT!");
-                        continue;
-                    }
-
                     // we are sending a managed object to unmanaged thread (i.e., C++) the object has to be pinned
                     // to a fixed location in memory during the plugin call
                     var brick = m_cpu_cache.Get(brick_id);
@@ -1234,9 +1266,11 @@ namespace UnityCTVisualizer
                     BrickCacheUsage evicted_slot = m_brick_cache_usage[brick_cache_idx];
                     if (evicted_slot.timestamp == m_timestamp)
                     {
+#if DEBUG
                         Debug.LogWarning("circular brick requests detected!\n" +
                             "This is caused by an insufficient GPU brick cache size for the set viusalization parameters.\n" +
                             "To solve this, consider increasing the GPU brick cache size or adjusting the visualization parameters for a lower visual quality.");
+#endif
                         continue;
                     }
                     // check if we are evicting a slot that was used a while ago but is no-longer in-use
@@ -1327,8 +1361,9 @@ namespace UnityCTVisualizer
             // make sure to only start when all dependencies are initialized
             yield return new WaitUntil(() => (m_volume_dataset != null) && (m_transfer_function != null)
                 && (m_brick_cache != null));
-
-            Debug.Log("started handling GPU brick requests");
+#if DEBUG
+            Debug.Log("[OOC PT + OCTREE] started handling GPU brick requests");
+#endif
 
             long nbr_bricks_uploaded = 0;
             int nbr_bricks_uploaded_per_frame = 0;

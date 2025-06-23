@@ -2,6 +2,7 @@ using System;
 
 namespace UnityCTVisualizer
 {
+    [Serializable]
     public struct PipelineParams
     {
         public RenderingMode RenderingMode;
