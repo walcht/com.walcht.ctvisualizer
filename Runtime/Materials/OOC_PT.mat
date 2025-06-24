@@ -30,7 +30,7 @@ Material:
     - _BrickRequestsRandomTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0.011352897, y: 0.9931617}
+        m_Offset: {x: -0.42720187, y: -0.9974513}
     - _BumpMap:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}

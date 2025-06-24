@@ -47,7 +47,6 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
             #define VISUALIZE_PAGE_TABLE_ENTRY_SPACE_SKIPPING 0
 
             #define INVALID_BRICK_ID 0x80000000
-            #define BRICK_CACHE_SLOT_USED 1
 
             #define MAX_ALLOWED_MAX_NBR_BRICK_REQUESTS_PER_RAY 16
             #define MAX_ALLOWED_NBR_RESOLUTION_LVLS 16
@@ -104,13 +103,10 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
             uniform RWStructuredBuffer<uint> brick_requests : register(u1);
 
             /// <summary>
-            ///     Each entry holds a boolean whether the brick, identified by its index,
-            ///     has been used in this frame. Negative value indicates that the brick
-            ///     spot has not been used in this frame. Index is the brick ID within
-            ///     the brick cache (follows the same order as residency octree node
-            ///     children - see above)
+            ///     Each entry holds a bitmask for 32 bricks. If a brick's associated bit is set,
+            ///     then it has been used for this frame.
             /// </summary>
-            uniform RWStructuredBuffer<float> brick_cache_usage : register(u2);
+            uniform RWStructuredBuffer<uint> brick_cache_usage : register(u2);
 
 
             /// <summary>
@@ -240,13 +236,11 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
                         sampled_density = tex3Dlod(_BrickCache, brick_pos).r;
 
                         // then report the brick cache usage for this frame
-                        int brick_idx =
-                            (_BrickCacheNbrBricks.x * _BrickCacheNbrBricks.y *
-                                round(page_dir_entry.z * _BrickCacheNbrBricks.z)) +
-                            (_BrickCacheNbrBricks.x * round(page_dir_entry.y * _BrickCacheNbrBricks.y)) +
-                            round(page_dir_entry.x * _BrickCacheNbrBricks.x);
+                        int brick_idx = _BrickCacheNbrBricks.x * _BrickCacheNbrBricks.y * round(page_dir_entry.z * _BrickCacheNbrBricks.z)
+                            + _BrickCacheNbrBricks.x * round(page_dir_entry.y * _BrickCacheNbrBricks.y)
+                            + round(page_dir_entry.x * _BrickCacheNbrBricks.x);
                         // indicate that this brick cache slot was used in this frame
-                        brick_cache_usage[brick_idx] = BRICK_CACHE_SLOT_USED;
+                        brick_cache_usage[brick_idx / 32] |= (1 << (brick_idx % 32));
                     }
 
                     else if (paging_flag == HOMOGENEOUS_PAGE_TABLE_ENTRY)

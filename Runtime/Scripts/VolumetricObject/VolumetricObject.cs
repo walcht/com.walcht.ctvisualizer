@@ -92,7 +92,6 @@ namespace UnityCTVisualizer
         /////////////////////////////////
         // CONSTANT DEFINES
         /////////////////////////////////
-        public static readonly int UNUSED_BRICK_CACHE_SLOT = 0;
         public static readonly UInt32 INVALID_BRICK_ID = 0x80000000;
         private const float MM_TO_METERS = 0.001f;
 
@@ -184,14 +183,14 @@ namespace UnityCTVisualizer
         /// <summary>
         ///     Holds temporary brick cache usage data retrieved from the GPU.
         /// </summary>
-        private float[] m_brick_cache_usage_tmp;
+        private UInt32[] m_brick_cache_usage_tmp;
 
         /// <summary>
         ///    GPU-side brick cache usage default buffer data. This is used to reset
         ///    the GPU-side brick cache usage buffer before the start of next frame
         ///    rendering.
         /// </summary>
-        private float[] m_brick_cache_usage_default_data;
+        private UInt32[] m_brick_cache_usage_default_data;
 
 
         /////////////////////////////////
@@ -597,31 +596,37 @@ namespace UnityCTVisualizer
 
         private void InitializeBrickCacheUsage()
         {
-            int brick_cache_usage_size = m_gpu_brick_cache_nbr_bricks.x * m_gpu_brick_cache_nbr_bricks.y
-                * m_gpu_brick_cache_nbr_bricks.z;
-            m_brick_cache_usage_cb = new ComputeBuffer(brick_cache_usage_size, sizeof(float));
-            m_brick_cache_usage_default_data = new float[brick_cache_usage_size];
-            m_brick_cache_usage_tmp = new float[brick_cache_usage_size];
-            m_brick_cache_usage_sorted = new BrickCacheUsage[brick_cache_usage_size];
-            m_brick_cache_usage = new BrickCacheUsage[brick_cache_usage_size];
+            int nbr_bricks = m_gpu_brick_cache_nbr_bricks.x * m_gpu_brick_cache_nbr_bricks.y * m_gpu_brick_cache_nbr_bricks.z;
+            int brick_cache_usage_size = Mathf.CeilToInt(nbr_bricks / 32.0f);
+
+            m_brick_cache_usage_cb = new ComputeBuffer(brick_cache_usage_size, sizeof(UInt32));
+            m_brick_cache_usage_default_data = new UInt32[brick_cache_usage_size];
+            m_brick_cache_usage_tmp = new UInt32[brick_cache_usage_size];
+
+            m_brick_cache_usage_sorted = new BrickCacheUsage[nbr_bricks];
+            m_brick_cache_usage = new BrickCacheUsage[nbr_bricks];
             for (int i = 0; i < brick_cache_usage_size; ++i)
             {
-                m_brick_cache_usage_default_data[i] = UNUSED_BRICK_CACHE_SLOT;
-                m_brick_cache_usage[i] = new BrickCacheUsage()
+                m_brick_cache_usage_default_data[i] = 0u;
+                for (int j = 0; (j < 32) && (i * 32 + j < m_brick_cache_usage.Length); ++j)
                 {
-                    brick_id = INVALID_BRICK_ID,  // invalid brick ID => free slot
-                    brick_cache_idx = i,
-                    timestamp = 0,                 // 0 so that when sorted, free slots are placed first
-                    brick_min = 0,
-                    brick_max = 0
-                };
+                    int brick_idx = i * 32 + j;
+                    m_brick_cache_usage[brick_idx] = new BrickCacheUsage()
+                    {
+                        brick_id = INVALID_BRICK_ID,    // invalid brick ID => free slot
+                        brick_cache_idx = brick_idx,
+                        timestamp = 0,                  // 0 so that when sorted, free slots are placed first
+                        brick_min = 0,
+                        brick_max = 0
+                    };
+                }
             }
             m_material.SetBuffer(SHADER_BRICK_CACHE_USAGE_ID, m_brick_cache_usage_cb);
             Graphics.SetRandomWriteTarget(2, m_brick_cache_usage_cb, true);
             GPUResetBrickCacheUsage();
 #if DEBUG
             Debug.Log($"brick cache usage buffer elements count: {brick_cache_usage_size}");
-            Debug.Log($"brick cache usage size: {brick_cache_usage_size * sizeof(Int32) / 1024.0f} KB");
+            Debug.Log($"brick cache usage size: {brick_cache_usage_size * sizeof(UInt32) / 1024.0f} KB");
             Debug.Log("brick cache usage successfully initialized");
 #endif
         }
@@ -1561,11 +1566,19 @@ namespace UnityCTVisualizer
             m_brick_cache_usage_cb.GetData(m_brick_cache_usage_tmp);
             for (int i = 0; i < m_brick_cache_usage_tmp.Length; ++i)
             {
-                // filter unused brick slots
-                if ((m_brick_cache_usage_tmp[i] != UNUSED_BRICK_CACHE_SLOT)
-                    && (m_brick_cache_usage[i].brick_id != INVALID_BRICK_ID))
+                if (m_brick_cache_usage_tmp[i] == 0)
                 {
-                    m_brick_cache_usage[i].timestamp = m_timestamp;
+                    continue;
+                }
+
+                for (int j = 0; (j < 32) && (i * 32 + j < m_brick_cache_usage.Length); ++j)
+                {
+                    int brick_idx = i * 32 + j;
+                    // filter unused brick slots
+                    if (((m_brick_cache_usage_tmp[i] >> j) & 0x1) == 1)
+                    {
+                        m_brick_cache_usage[brick_idx].timestamp = m_timestamp;
+                    }
                 }
             }
             // sort the just-updated brick cache usage array by timestamp.
