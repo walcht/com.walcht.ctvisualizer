@@ -47,6 +47,9 @@ namespace UnityCTVisualizer
         [JsonProperty("chunk_size")]
         public int ChunkSize { get; set; }
 
+        [JsonProperty("chunk_padding")]
+        public bool ChunkPadding { get; set; }
+
         [JsonProperty("nbr_chunks_per_resolution_lvl")]
         public int[][] NbrChunksPerResolutionLvl { get; set; }
 
@@ -145,6 +148,7 @@ namespace UnityCTVisualizer
             if ((metadata.ChunkSize & (metadata.ChunkSize - 1)) != 0)
                 throw new Exception($"invalid chunk size {metadata.ChunkSize}. Expected power of 2");
             ChunkSize = metadata.ChunkSize;
+            ChunkPadding = metadata.ChunkPadding;
 
             if (metadata.NbrResolutionLvls <= 0)
                 throw new Exception($"invalid number of resolution levels: {metadata.NbrResolutionLvls}");
@@ -272,6 +276,12 @@ namespace UnityCTVisualizer
         public int ChunkSize { get; private set; }
 
         /// <summary>
+        ///     Whether padding is added to the chunks for the purpose of trillinear inter-brick interpolation.
+        ///     If set to true, the actual chunk size is increased by 2.
+        /// </summary>
+        public bool ChunkPadding { get; private set; }
+
+        /// <summary>
         ///     Number of chunks per each resolution level. Number of entries is equal to NbrResolutionLvls and each
         ///     entry holds the number of chunks along each dimension (nbr_chunks_x, nbr_chunks_y, nbr_chunks_z).
         /// </summary>
@@ -388,28 +398,46 @@ namespace UnityCTVisualizer
             return new Vector3Int(offset_x, offset_y, offset_z);
         }
 
-        public static int GetBytearrayOffset(int i, int x, int y, int z, int c, int b, int bpc)
+        public static int GetBytearrayOffset(int i, Vector3Int brick_offset_within_chunk, int chunk_size,
+            int brick_size, int bpc)
         {
-            return (z * c * c + (y + (i / b) % b + (i / (b * b)) * c) * c + x + i % b) * bpc;
+            return (brick_offset_within_chunk.z * chunk_size * chunk_size
+                + (brick_offset_within_chunk.y + (i / brick_size) % brick_size + (i / (brick_size * brick_size)) * chunk_size) * chunk_size
+                + brick_offset_within_chunk.x + i % brick_size) * bpc;
         }
 
 
         /// <summary>
-        ///     Imports a single volume brick from its corresponding chunk into the provided
-        ///     memory cache
+        ///     Imports a single volume brick from its corresponding chunk into the provided memory cache.
         /// </summary>
         /// 
-        /// <param name="metadata"></param>
-        /// <param name="brick_id"></param>
-        /// <param name="brick_size"></param>
-        /// <param name="cache"></param>
+        /// <param name="metadata">
+        ///     CVDS metadata used to retrieve chunk filepaths and check for chunk padding (and therefore inter-brick
+        ///     interpolation support).
+        /// </param>
+        ///
+        /// <param name="brick_id">
+        ///     ID of the brick to be imported.
+        /// </param>
+        ///
+        /// <param name="brick_size">
+        ///     Brick size excluding potential padding.
+        /// </param>
+        ///
+        /// <param name="cache">
+        ///     CPU memory brick cache.
+        /// </param>
+        ///
+        /// <param name="ignore_inter_brick_interpolation">
+        ///     Whether to ignore inter-brick interpolation in case chunk padding is added.
+        /// </param>
         /// 
         /// <remarks>
         ///     Import will fail if chunk size in bytes exceeds the maximum size for an object allowed
         ///     by .NET (i.e., 2GBs). No size checks are performed in this function.
         /// </remarks>
         public static void ImportBrick(CVDSMetadata metadata, UInt32 brick_id, int brick_size,
-            MemoryCache<byte> cache, bool import_whole_chunk = false)
+            MemoryCache<byte> cache, bool ignore_inter_brick_interpolation = false)
         {
             int resolution_lvl = (int)(brick_id >> 26);
             int chunk_id = BrickToChunkID(metadata, brick_id, brick_size);
@@ -418,8 +446,21 @@ namespace UnityCTVisualizer
             byte[] source_data = File.ReadAllBytes(chunk_fp);
 
             // TODO: add optimization for when chunk_size == BrickSize
-            int brick_size_cubed = brick_size * brick_size * brick_size;
-            int decompressed_size =  metadata.ChunkSize * metadata.ChunkSize * metadata.ChunkSize;
+            int chunk_size_offset = 0;
+            int brick_size_offset = 0;
+            if (metadata.ChunkPadding && !ignore_inter_brick_interpolation)
+            {
+                brick_size_offset = 2;
+                chunk_size_offset = 2;
+            }
+            else if (metadata.ChunkPadding && ignore_inter_brick_interpolation)
+            {
+                // ignore the chunk padding
+                brick_offset_within_chunk += Vector3Int.one;
+                chunk_size_offset = 2;
+            }
+            int brick_size_cubed = (brick_size + brick_size_offset) * (brick_size + brick_size_offset) * (brick_size + brick_size_offset);
+            int decompressed_size = (metadata.ChunkSize + chunk_size_offset) * (metadata.ChunkSize + chunk_size_offset) * (metadata.ChunkSize + chunk_size_offset);
 
             byte[] decompressed_data;
             if (metadata.Lz4Compressed)
@@ -442,18 +483,13 @@ namespace UnityCTVisualizer
                 decompressed_data = source_data;
             }
 
-            if (import_whole_chunk)
-            {
-                // TODO: implement this
-            }
-
             byte[] data = new byte[brick_size_cubed];
             byte min = byte.MaxValue;
             byte max = byte.MinValue;
             for (int i = 0; i < brick_size_cubed; ++i)
             {
-                int j = Importer.GetBytearrayOffset(i, brick_offset_within_chunk.x, brick_offset_within_chunk.y,
-                    brick_offset_within_chunk.z, metadata.ChunkSize, brick_size, sizeof(byte));
+                int j = Importer.GetBytearrayOffset(i, brick_offset_within_chunk, metadata.ChunkSize + chunk_size_offset,
+                    brick_size + brick_size_offset, sizeof(byte));
                 data[i] = decompressed_data[j];
                 min = Math.Min(min, data[i]);
                 max = Math.Max(max, data[i]);
@@ -482,8 +518,9 @@ namespace UnityCTVisualizer
 
             int nbr_threads = nbr_importer_threads > 0 ? nbr_importer_threads :
                 Math.Max(Environment.ProcessorCount - 2, 1);
-
+#if DEBUG
             UnityEngine.Debug.Log($"uploading {total_nbr_bricks} bricks to host memory cache ...");
+#endif
             Parallel.For(0, total_nbr_bricks, new ParallelOptions()
             {
                 TaskScheduler = new LimitedConcurrencyLevelTaskScheduler(nbr_threads)
@@ -539,10 +576,10 @@ namespace UnityCTVisualizer
         {
             string fp = Path.Join(metadata.RootFilepath, "residency_octree.bin");
             byte[] source_data = File.ReadAllBytes(fp);
-
+#if DEBUG
             Debug.Assert(metadata.OctreeNbrNodes == (source_data.Length / Marshal.SizeOf<ResidencyNode>()),
                 $"unexpected number of residency octree nodes from {fp}");
-
+#endif
             ResidencyNode[] data = new ResidencyNode[metadata.OctreeNbrNodes];
             for (int i = 0, j = 0; i < source_data.Length; ++j, i += 20)
             {
@@ -578,10 +615,10 @@ namespace UnityCTVisualizer
         {
             string fp = Path.Join(metadata.RootFilepath, "histogram.bin");
             byte[] source_data = File.ReadAllBytes(fp);
-
+#if DEBUG
             Debug.Assert(metadata.HistogramNbrBins == (source_data.Length) / Marshal.SizeOf<UInt64>(),
                 $"unexpected number of histogram bins from {fp}");
-
+#endif
             UInt64[] data = new UInt64[metadata.HistogramNbrBins];
 
             for (int i = 0, j = 0; i < source_data.Length; i += 8, ++j)

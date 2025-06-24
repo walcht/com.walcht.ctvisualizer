@@ -15,7 +15,7 @@ namespace UnityCTVisualizer
 
     public enum RenderingMode
     {
-        IC,
+        IC = 0,
         OOC_PT,
         OOC_HYBRID
     }
@@ -114,8 +114,16 @@ namespace UnityCTVisualizer
         private byte[] m_brick_requests_random_tex_data;
         private int m_tex_plugin_format = (int)TextureSubPlugin.Format.UR8;
         private PipelineParams m_PipelineParams;
+
+        // this is the size of a brick without taking into consideration a potential padding
         private int m_brick_size;
         private int m_brick_size_cubed;
+
+        // this is the actual size of a brick including padding for inter-brick interpolation
+        // in case inter-brick interpolation is supported, this will be set to m_brick_size + 2 otherwise it is
+        // the same as m_brick_size.
+        private int m_actual_brick_size;
+        private int m_actual_brick_size_cubed;
 
 
         /////////////////////////////////
@@ -157,6 +165,7 @@ namespace UnityCTVisualizer
         private UInt32 m_brick_cache_texture_id = 0;
         private IntPtr m_brick_cache_ptr = IntPtr.Zero;
         private float m_brick_cache_size_mb;
+        private Vector4 m_brick_cache_voxel_size;
 
         /////////////////////////////////
         // BRICK CACHE USAGE
@@ -337,12 +346,18 @@ namespace UnityCTVisualizer
             if (volumetricDataset == null)
                 throw new ArgumentNullException("the provided volumetric dataset should be a non-null reference");
 
+            m_metadata = volumetricDataset.Metadata;
             m_PipelineParams = pipelineParams;
             m_brick_size = pipelineParams.BrickSize;
             m_brick_size_cubed = m_brick_size * m_brick_size * m_brick_size;
+            m_actual_brick_size = m_brick_size;
+            if (m_metadata.ChunkPadding)
+            {
+                m_actual_brick_size += 2;
+            }
+            m_actual_brick_size_cubed = m_actual_brick_size * m_actual_brick_size * m_actual_brick_size;
             m_rendering_mode = pipelineParams.RenderingMode;
             m_volume_dataset = volumetricDataset;
-            m_metadata = volumetricDataset.Metadata;
 
             // set debuggin parameters
             InstantiateBrickWireframes = debuggingParams.BrickWireframes;
@@ -369,10 +384,11 @@ namespace UnityCTVisualizer
                 UnityEngine.Random.InitState(debuggingParams.RandomSeed);
             }
 
-            m_cpu_cache = new MemoryCache<byte>(pipelineParams.CPUBrickCacheSizeMBs, m_brick_size_cubed);
 
             if (m_rendering_mode == RenderingMode.IC)
             {
+                m_cpu_cache = new MemoryCache<byte>(pipelineParams.CPUBrickCacheSizeMBs, m_brick_size_cubed);
+
                 // assign material
                 m_material = GetComponent<Renderer>().material = IC_MAT;
 
@@ -429,13 +445,15 @@ namespace UnityCTVisualizer
             }
             else if (m_rendering_mode == RenderingMode.OOC_PT || m_rendering_mode == RenderingMode.OOC_HYBRID)
             {
+                m_cpu_cache = new MemoryCache<byte>(pipelineParams.CPUBrickCacheSizeMBs, m_actual_brick_size_cubed);
+
                 // clear any previously set UAVs
                 Graphics.ClearRandomWriteTargets();
 
-                m_gpu_brick_cache_size = GetGPUBrickCacheDims(m_PipelineParams.GPUBrickCacheSizeMBs, m_brick_size);
+                m_gpu_brick_cache_size = GetGPUBrickCacheDims(m_PipelineParams.GPUBrickCacheSizeMBs, m_actual_brick_size);
 
-                m_gpu_brick_cache_nbr_bricks = new(m_gpu_brick_cache_size.x / m_brick_size,
-                    m_gpu_brick_cache_size.y / m_brick_size, m_gpu_brick_cache_size.z / m_brick_size);
+                m_gpu_brick_cache_nbr_bricks = new(m_gpu_brick_cache_size.x / m_actual_brick_size,
+                    m_gpu_brick_cache_size.y / m_actual_brick_size, m_gpu_brick_cache_size.z / m_actual_brick_size);
 
                 // assign the material
                 m_material = GetComponent<Renderer>().material = m_rendering_mode == RenderingMode.OOC_PT ? OOC_PT_MAT : OOC_HYBRID_MAT;
@@ -574,8 +592,7 @@ namespace UnityCTVisualizer
 
         private void InitializeBrickRequestsBuffer()
         {
-            m_brick_requests_cb = new ComputeBuffer(m_PipelineParams.MaxNbrBrickRequestsPerFrame, sizeof(UInt32),
-                ComputeBufferType.Default);
+            m_brick_requests_cb = new ComputeBuffer(m_PipelineParams.MaxNbrBrickRequestsPerFrame, sizeof(UInt32));
 
             m_brick_requests_default_data = new UInt32[m_PipelineParams.MaxNbrBrickRequestsPerFrame];
             for (int i = 0; i < m_brick_requests_default_data.Length; ++i)
@@ -785,9 +802,9 @@ namespace UnityCTVisualizer
             m_material.SetInteger(SHADER_BRICK_SIZE_ID, m_brick_size);
             m_material.SetInteger(SHADER_MAX_RES_LVL_ID, m_metadata.NbrResolutionLvls - 1);
 
-            Vector4 brick_cache_voxel_size = new(1.0f / m_gpu_brick_cache_size.x,
+            m_brick_cache_voxel_size = new(1.0f / m_gpu_brick_cache_size.x,
                         1.0f / m_gpu_brick_cache_size.y, 1.0f / m_gpu_brick_cache_size.z);
-            m_material.SetVector(SHADER_BRICK_CACHE_VOXEL_SIZE, brick_cache_voxel_size);
+            m_material.SetVector(SHADER_BRICK_CACHE_VOXEL_SIZE, m_brick_cache_voxel_size);
 
             m_material.SetVector(SHADER_BRICK_CACHE_DIMS_ID, new Vector3(m_gpu_brick_cache_size.x,
                 m_gpu_brick_cache_size.y, m_gpu_brick_cache_size.z));
@@ -848,8 +865,6 @@ namespace UnityCTVisualizer
             }
 
             m_material.SetTexture(SHADER_BRICK_CACHE_TEX_ID, m_brick_cache);
-            m_material.SetFloat(SHADER_SAMPLING_QUALITY_FACTOR_ID, 1.0f);
-            // m_material.SetFloat(SHADER_LOD_QUALITY_FACTOR_ID, 2.0f);
         }
 
 
@@ -1214,6 +1229,13 @@ namespace UnityCTVisualizer
             UInt32[] raw_brick_requests = new UInt32[m_PipelineParams.MaxNbrBrickRequestsPerFrame];
             HashSet<UInt32> filtered_brick_requests = new (m_PipelineParams.MaxNbrBrickRequestsPerFrame);
 
+            // add offset for inter-brick interpolation support
+            Vector3 brick_cache_slot_offset = Vector3.zero;
+            if (m_metadata.ChunkPadding)
+            {
+                brick_cache_slot_offset = new Vector3(m_brick_cache_voxel_size.x, m_brick_cache_voxel_size.y, m_brick_cache_voxel_size.z);
+            }
+
             while (true)
             {
                 // wait until current frame rendering is done ...
@@ -1283,12 +1305,13 @@ namespace UnityCTVisualizer
                     {
                         // set the alpha component to UNMAPPED so the shader knows
                         SetPageEntryAlphaChannelData(GetPageTableIndex(evicted_slot.brick_id), PageEntryFlag.UNMAPPED_PAGE_TABLE_ENTRY);
-
+#if DEBUG
                         // in case we want to instantiate brick wireframes (useful for debugging)
                         if (InstantiateBrickWireframes)
                         {
                             Destroy(transform.Find($"brick_{evicted_slot.brick_id & 0x03FFFFFF}_res_lvl_{evicted_slot.brick_id >> 26}").gameObject);
                         }
+#endif
                     }
 
                     BrickCacheUsage added_slot = new()
@@ -1303,22 +1326,23 @@ namespace UnityCTVisualizer
                     };
                     m_brick_cache_usage[brick_cache_idx] = added_slot;
 
-                    GetBrickCacheSlotPosition(brick_cache_idx, out Vector3Int brick_cache_slot_pos);
                     GetBrickCacheSlotPosition(brick_cache_idx, out Vector3 brick_cache_slot_pos_normalized);
                     int page_dir_enty_idx = GetPageTableIndex(brick_id);
-                    m_page_dir_data[page_dir_enty_idx] = brick_cache_slot_pos_normalized.x;
-                    m_page_dir_data[page_dir_enty_idx + 1] = brick_cache_slot_pos_normalized.y;
-                    m_page_dir_data[page_dir_enty_idx + 2] = brick_cache_slot_pos_normalized.z;
+                    m_page_dir_data[page_dir_enty_idx] = brick_cache_slot_pos_normalized.x + brick_cache_slot_offset.x;
+                    m_page_dir_data[page_dir_enty_idx + 1] = brick_cache_slot_pos_normalized.y + brick_cache_slot_offset.y;
+                    m_page_dir_data[page_dir_enty_idx + 2] = brick_cache_slot_pos_normalized.z + brick_cache_slot_offset.z;
                     SetPageEntryAlphaChannelData(page_dir_enty_idx, PageEntryFlag.MAPPED_PAGE_TABLE_ENTRY, added_slot.brick_min, added_slot.brick_max);
                     m_page_dir_dirty = true;
+#if DEBUG
                     // in case we want to instantiate brick wireframes (useful for debugging)
                     if (InstantiateBrickWireframes)
                     {
                         OOCAddBrickWireframeObject(brick_id);
                     }
-
+#endif
                     // allocate the plugin call's arguments struct
                     handles[nbr_bricks_uploaded_per_frame] = GCHandle.Alloc(brick.data, GCHandleType.Pinned);
+                    GetBrickCacheSlotPosition(brick_cache_idx, out Vector3Int brick_cache_slot_pos);
                     TextureSubImage3DParams args = new()
                     {
                         texture_handle = m_brick_cache_ptr,
@@ -1486,7 +1510,7 @@ namespace UnityCTVisualizer
                     UpdateBrickCacheResidencyHashSet(brick_cache_added_slots, brick_cache_evicted_slots);
                     GPUUpdateResidencyOctree(brick_cache_added_slots, brick_cache_evicted_slots);
                     GPUUpdatePageTables();
-
+#if DEBUG
                     // in case we want to instantiate brick wireframes (useful for debugging)
                     if (InstantiateBrickWireframes)
                     {
@@ -1499,7 +1523,7 @@ namespace UnityCTVisualizer
                             Destroy(transform.Find($"brick_{evicted_slot.brick_id & 0x03FFFFFF}_res_lvl_{evicted_slot.brick_id >> 26}").gameObject);
                         }
                     }
-
+#endif
                     brick_cache_added_slots.Clear();
                     brick_cache_evicted_slots.Clear();
                 }
@@ -1512,6 +1536,7 @@ namespace UnityCTVisualizer
         }  // END COROUTINE
 
 
+#if DEBUG
         /// <summary>
         ///     Adds a wireframe object to denote the spatial extent of the provided brick.
         ///     Useful for debugging purposes and observing out-of-core GPU brick loading.
@@ -1543,6 +1568,7 @@ namespace UnityCTVisualizer
             brick_wireframe.transform.localScale = brick_scale;
             brick_wireframe.name = $"brick_{brick_id & 0x03FFFFFF}_res_lvl_{brick_id >> 26}";
         }
+#endif
 
 
         /// <summary>
@@ -1623,20 +1649,12 @@ namespace UnityCTVisualizer
         }
 
 
-        private void GetBrickCacheSlotPosition(int brick_cache_idx, out UInt32 x, out UInt32 y, out UInt32 z)
-        {
-            x = (UInt32)((brick_cache_idx % m_gpu_brick_cache_nbr_bricks.x) * m_brick_size);
-            y = (UInt32)(((brick_cache_idx / m_gpu_brick_cache_nbr_bricks.x) % m_gpu_brick_cache_nbr_bricks.y) * m_brick_size);
-            z = (UInt32)((brick_cache_idx / (m_gpu_brick_cache_nbr_bricks.x * m_gpu_brick_cache_nbr_bricks.y)) * m_brick_size);
-        }
-
-
         private void GetBrickCacheSlotPosition(int brick_cache_idx, out Vector3 pos)
         {
             pos = new Vector3(
-                (brick_cache_idx % m_gpu_brick_cache_nbr_bricks.x) * m_brick_size / (float)m_brick_cache.width,
-                ((brick_cache_idx / m_gpu_brick_cache_nbr_bricks.x) % m_gpu_brick_cache_nbr_bricks.y) * m_brick_size / (float)m_brick_cache.height,
-                (brick_cache_idx / (m_gpu_brick_cache_nbr_bricks.x * m_gpu_brick_cache_nbr_bricks.y)) * m_brick_size / (float)m_brick_cache.depth
+                (brick_cache_idx % m_gpu_brick_cache_nbr_bricks.x) * m_actual_brick_size / (float)m_brick_cache.width,
+                ((brick_cache_idx / m_gpu_brick_cache_nbr_bricks.x) % m_gpu_brick_cache_nbr_bricks.y) * m_actual_brick_size / (float)m_brick_cache.height,
+                (brick_cache_idx / (m_gpu_brick_cache_nbr_bricks.x * m_gpu_brick_cache_nbr_bricks.y)) * m_actual_brick_size / (float)m_brick_cache.depth
             );
         }
 
@@ -1644,9 +1662,9 @@ namespace UnityCTVisualizer
         private void GetBrickCacheSlotPosition(int brick_cache_idx, out Vector3Int pos)
         {
             pos = new Vector3Int(
-                (brick_cache_idx % m_gpu_brick_cache_nbr_bricks.x) * m_brick_size,
-                ((brick_cache_idx / m_gpu_brick_cache_nbr_bricks.x) % m_gpu_brick_cache_nbr_bricks.y) * m_brick_size,
-                (brick_cache_idx / (m_gpu_brick_cache_nbr_bricks.x * m_gpu_brick_cache_nbr_bricks.y)) * m_brick_size
+                (brick_cache_idx % m_gpu_brick_cache_nbr_bricks.x) * m_actual_brick_size,
+                ((brick_cache_idx / m_gpu_brick_cache_nbr_bricks.x) % m_gpu_brick_cache_nbr_bricks.y) * m_actual_brick_size,
+                (brick_cache_idx / (m_gpu_brick_cache_nbr_bricks.x * m_gpu_brick_cache_nbr_bricks.y)) * m_actual_brick_size
             );
         }
 
