@@ -32,8 +32,8 @@ namespace UnityCTVisualizer
         {
             if (!m_Done)
             {
-                transform.Rotate(m_RotationAxis, rotation_speed * Time.deltaTime, Space.Self);
                 Benchmark();
+                transform.Rotate(m_RotationAxis, rotation_speed * Time.deltaTime, Space.Self);
             }
         }
 

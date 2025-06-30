@@ -361,6 +361,11 @@ namespace UnityCTVisualizer
             m_rendering_mode = pipelineParams.RenderingMode;
             m_volume_dataset = volumetricDataset;
 
+            if (debuggingParams.RandomSeedValid)
+            {
+                UnityEngine.Random.InitState(debuggingParams.RandomSeed);
+            }
+
             // set debuggin parameters
             InstantiateBrickWireframes = debuggingParams.BrickWireframes;
             if (debuggingParams.Benchmark)
@@ -381,11 +386,6 @@ namespace UnityCTVisualizer
                     }
                 }
             }
-            if (debuggingParams.RandomSeedValid)
-            {
-                UnityEngine.Random.InitState(debuggingParams.RandomSeed);
-            }
-
 
             if (m_rendering_mode == RenderingMode.IC)
             {
