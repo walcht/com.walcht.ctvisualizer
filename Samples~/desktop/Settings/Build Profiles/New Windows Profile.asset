@@ -164,7 +164,13 @@ MonoBehaviour:
     - line: '|   visionOSBundleVersion: 1.0'
     - line: '|   tvOSBundleVersion: 1.0'
     - line: '|   bundleVersion: 0.1.0'
-    - line: '|   preloadedAssets: []'
+    - line: '|   preloadedAssets:'
+    - line: '|   - {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b,
+        type: 3}'
+    - line: '|   - {fileID: 3470226923651823394, guid: fd06fc3d65da4f647be413d80c3c3c7c,
+        type: 2}'
+    - line: '|   - {fileID: 11400000, guid: ad44ddfe18854f044b890b1059a6a50e, type:
+        2}'
     - line: '|   metroInputSource: 0'
     - line: '|   wsaTransparentSwapchain: 0'
     - line: '|   m_HolographicPauseOnTrackingLoss: 1'
@@ -553,7 +559,7 @@ MonoBehaviour:
     - line: '|     m_APIs: 150000000b000000'
     - line: '|     m_Automatic: 0'
     - line: '|   - m_BuildTarget: WindowsStandaloneSupport'
-    - line: '|     m_APIs: 15000000'
+    - line: '|     m_APIs: 0200000015000000'
     - line: '|     m_Automatic: 0'
     - line: '|   m_BuildTargetVRSettings: []'
     - line: '|   m_DefaultShaderChunkSizeInMB: 16'
