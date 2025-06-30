@@ -4,6 +4,10 @@ using Newtonsoft.Json;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityD3;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEditor.Graphs;
 
 namespace UnityCTVisualizer
 {
@@ -22,7 +26,7 @@ namespace UnityCTVisualizer
         public float OpacityCutoff;
         public string Interpolation;
         public float SamplingQualityFactor;
-        public float LODQualityFactor;
+        public List<float> LODDistances;
         public byte HomogeneityTolerance;
 
 
@@ -64,22 +68,30 @@ namespace UnityCTVisualizer
         [SerializeField] TMP_InputField m_OpacityCutoffInputField;
         [SerializeField] Slider m_SamplingQualityFactorSlider;
         [SerializeField] TMP_InputField m_SamplingQualityFactorInputField;
-        [SerializeField] Slider m_LODQualityFactorSlider;
-        [SerializeField] TMP_InputField m_LODQualityFactorInputField;
         [SerializeField] TMP_Dropdown m_InterpolationDropDown;
         [SerializeField] Slider m_HomogeneityToleranceSlider;
         [SerializeField] TMP_InputField m_HomogeneityToleranceInputField;
 
         [SerializeField] Button m_Save;
         [SerializeField] Button m_Load;
+        [SerializeField] RectTransform m_LODDistancesControlContainer;
+        [SerializeField, Range(0.1f, 1.0f)] float m_MinLODDistance = 0.2f;
+        [SerializeField, Range(1.1f, 5.0f)] float m_MaxLODDistance = 3.0f;
+        [SerializeField] Material m_AxisAndTicksMaterial;
+        [SerializeField] GameObject m_LODDistanceControlPrefab;
 
         /////////////////////////////////
         // CACHED COMPONENTS
         /////////////////////////////////
-        int m_PrevTFIndex = -1;
-        int m_PrevInterIndex = -1;
+        private int m_PrevTFIndex = -1;
+        private int m_PrevInterIndex = -1;
+        private List<LODDistanceControlPointUI> m_LODDistanceControls = new();
+        private List<float> m_LODDistances = new();
 
         private ManagerUI m_ManagerUI;
+        private Axis<float> m_LODDistancesAxis;
+        private ScaleLog m_LODDistancesScale;
+
 
         public void Init(ManagerUI managerUI)
         {
@@ -115,11 +127,6 @@ namespace UnityCTVisualizer
             m_SamplingQualityFactorInputField.readOnly = false;
             m_SamplingQualityFactorInputField.contentType = TMP_InputField.ContentType.DecimalNumber;
 
-            m_LODQualityFactorSlider.minValue = 0.10f;
-            m_LODQualityFactorSlider.maxValue = 5.00f;
-            m_LODQualityFactorInputField.readOnly = false;
-            m_LODQualityFactorInputField.contentType = TMP_InputField.ContentType.DecimalNumber;
-
             m_HomogeneityToleranceSlider.wholeNumbers = true;
             m_HomogeneityToleranceSlider.minValue = 0;
             m_HomogeneityToleranceSlider.maxValue = 255;
@@ -134,6 +141,8 @@ namespace UnityCTVisualizer
             {
                 throw new Exception("Init has to be called before enabling this transfer function UI");
             }
+
+            StartCoroutine(ConstructAxes());
         }
 
 
@@ -149,8 +158,6 @@ namespace UnityCTVisualizer
             m_OpacityCutoffInputField.onSubmit.AddListener(OnOpacityCutoffInput);
             m_SamplingQualityFactorSlider.onValueChanged.AddListener(OnSamplingQualityFactorInput);
             m_SamplingQualityFactorInputField.onSubmit.AddListener(OnSamplingQualityFactorInput);
-            m_LODQualityFactorSlider.onValueChanged.AddListener(OnLODQualityFactorInput);
-            m_LODQualityFactorInputField.onSubmit.AddListener(OnLODQualityFactorInput);
             m_HomogeneityToleranceSlider.onValueChanged.AddListener(OnHomogeneityToleranceInput);
             m_HomogeneityToleranceInputField.onSubmit.AddListener(OnHomogeneityToleranceInput);
 
@@ -160,7 +167,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ModelTFChange += OnModelTFChange;
             VisualizationParametersEvents.ModelOpacityCutoffChange += OnModelOpacityCutoffChange;
             VisualizationParametersEvents.ModelSamplingQualityFactorChange += OnModelSamplingQualityFactorChange;
-            VisualizationParametersEvents.ModelLODQualityFactorChange += OnModelLODQualityFactorChange;
+            VisualizationParametersEvents.ModelLODDistancesChange += OnModelLODDistancesChange;
             VisualizationParametersEvents.ModelInterpolationChange += OnModelInterpolationChange;
             VisualizationParametersEvents.ModelHomogeneityToleranceChange += OnModelHomogeneityToleranceChange;
         }
@@ -175,8 +182,6 @@ namespace UnityCTVisualizer
             m_OpacityCutoffInputField.onSubmit.RemoveAllListeners();
             m_SamplingQualityFactorSlider.onValueChanged.RemoveAllListeners();
             m_SamplingQualityFactorInputField.onSubmit.RemoveAllListeners();
-            m_LODQualityFactorSlider.onValueChanged.RemoveAllListeners();
-            m_LODQualityFactorInputField.onSubmit.RemoveAllListeners();
             m_HomogeneityToleranceSlider.onValueChanged.RemoveAllListeners();
             m_HomogeneityToleranceInputField.onSubmit.RemoveAllListeners();
 
@@ -186,10 +191,51 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ModelTFChange -= OnModelTFChange;
             VisualizationParametersEvents.ModelOpacityCutoffChange -= OnModelOpacityCutoffChange;
             VisualizationParametersEvents.ModelSamplingQualityFactorChange -= OnModelSamplingQualityFactorChange;
-            VisualizationParametersEvents.ModelLODQualityFactorChange -= OnModelLODQualityFactorChange;
+            VisualizationParametersEvents.ModelLODDistancesChange -= OnModelLODDistancesChange;
             VisualizationParametersEvents.ModelInterpolationChange -= OnModelInterpolationChange;
             VisualizationParametersEvents.ModelHomogeneityToleranceChange -= OnModelHomogeneityToleranceChange;
         }
+
+
+        IEnumerator ConstructAxes()
+        {
+            yield return new WaitUntil(() => m_LODDistancesControlContainer.rect.width != 0);
+
+            // create the x/y scales and axes
+            m_LODDistancesScale = new ScaleLog(m_MinLODDistance, m_MaxLODDistance, 0, m_LODDistancesControlContainer.rect.width);
+
+            m_LODDistancesAxis = new AxisBottom<float>(m_LODDistancesScale)
+                .SetAxisStrokeWidth(1.5f)
+                .SetAxisMaterial(m_AxisAndTicksMaterial)
+                .SetTickCount(2)
+                .SetTickMaterial(m_AxisAndTicksMaterial)
+                .SetTickTextColor(Color.white)
+                .SetTickStrokeWidth(1.0f)
+                .SetTickSize(m_LODDistancesControlContainer.rect.height / 5.0f)
+                .SetTickFontSize(10.0f)
+                .SetIsTickText2D(true)
+                .SetUseWorldSpace(false)
+                .SetAlignment(LineAlignment.TransformZ)
+                .Attach(m_LODDistancesControlContainer.gameObject);
+        }
+
+
+
+        private void Update()
+        {
+            m_LODDistancesAxis?.Update();
+        }
+
+
+        private void UpdateLODDistanceAxisTicks(List<float> distances)
+        {
+            // set the tick positions for the LOD distances axis
+            List<float> tick_positions = new(distances);
+            tick_positions.Insert(0, m_MinLODDistance);
+            tick_positions.Add(m_MaxLODDistance);
+            m_LODDistancesAxis.SetTicks(tick_positions);
+        }
+
 
         /////////////////////////////////
         /// UI CALLBACKS (VIEW INVOKES)
@@ -229,10 +275,7 @@ namespace UnityCTVisualizer
         private void OnSamplingQualityFactorInput(string val) => VisualizationParametersEvents.ViewSamplingQualityFactorChange?.Invoke(float.Parse(val));
 
 
-        private void OnLODQualityFactorInput(float val) => VisualizationParametersEvents.ViewLODQualityFactorChange?.Invoke(val);
-
-
-        private void OnLODQualityFactorInput(string val) => VisualizationParametersEvents.ViewLODQualityFactorChange?.Invoke(float.Parse(val));
+        private void OnLODDistancesInput(List<float> distances) => VisualizationParametersEvents.ViewLODDistancesChange?.Invoke(distances);
 
 
         private void OnHomogeneityToleranceInput(float val) => VisualizationParametersEvents.ViewHomogeneityToleranceChange?.Invoke((byte)Mathf.Clamp(val, 0, 255));
@@ -263,10 +306,55 @@ namespace UnityCTVisualizer
         }
 
 
-        private void OnModelLODQualityFactorChange(float value)
+        private void OnLODDistanceControlPositionChange(float pos, int res_lvl)
         {
-            m_LODQualityFactorSlider.SetValueWithoutNotify(value);
-            m_LODQualityFactorInputField.SetTextWithoutNotify(value.ToString("0.00"));
+            m_LODDistances[res_lvl] = m_LODDistancesScale.I(pos * m_LODDistancesControlContainer.rect.width);
+            UpdateLODDistanceAxisTicks(m_LODDistances);
+            VisualizationParametersEvents.ViewLODDistancesChange?.Invoke(m_LODDistances);
+        }
+
+
+        private void OnModelLODDistancesChange(List<float> distances)
+        {
+            // if this is the first time the LOD distances are set or a different dataset is loaded
+            if (m_LODDistances.Count != distances.Count)
+            {
+                foreach (var cp in m_LODDistanceControls)
+                {
+                    cp.OnPositionChanged -= OnLODDistanceControlPositionChange;
+                }
+
+                m_LODDistances.Clear();
+                m_LODDistanceControls.Clear();
+                for (int i = 0; i < distances.Count; ++i)
+                {
+                    m_LODDistances.Add(distances[i]);
+                    var cp = Instantiate(m_LODDistanceControlPrefab, m_LODDistancesControlContainer).GetComponent<LODDistanceControlPointUI>();
+                    cp.Init(m_LODDistancesScale.F(distances[i]) / m_LODDistancesControlContainer.rect.width, i);
+                    cp.OnPositionChanged += OnLODDistanceControlPositionChange;
+                    m_LODDistanceControls.Add(cp);
+                }
+                UpdateLODDistanceAxisTicks(distances);
+            }
+            // otherwise if simply one or more LOD distances have changed (while their total number remained the same)
+            else
+            {
+                bool dirty_axis_ticks = false;
+                for (int i = 0; i < distances.Count; ++i)
+                {
+                    if (m_LODDistances[i] != distances[i])
+                    {
+                        dirty_axis_ticks = true;
+                        m_LODDistances[i] = distances[i];
+                        m_LODDistanceControls[i].SetPosition(m_LODDistancesScale.F(distances[i]) / m_LODDistancesControlContainer.rect.width);
+                    }
+                }
+                if (dirty_axis_ticks)
+                {
+                    UpdateLODDistanceAxisTicks(distances);
+                }
+            }
+
         }
 
 
@@ -300,7 +388,7 @@ namespace UnityCTVisualizer
                 OpacityCutoff = m_OpacityCutoffSlider.value,
                 Interpolation = m_InterpolationDropDown.options[m_InterpolationDropDown.value].text,
                 SamplingQualityFactor= m_SamplingQualityFactorSlider.value,
-                LODQualityFactor = m_LODQualityFactorSlider.value,
+                LODDistances = m_LODDistances,
                 HomogeneityTolerance = (byte)m_HomogeneityToleranceSlider.value,
             };
             visParams.Serialize(fp);
@@ -325,7 +413,7 @@ namespace UnityCTVisualizer
 
             OnOpacityCutoffInput(visParams.OpacityCutoff);
             OnSamplingQualityFactorInput(visParams.SamplingQualityFactor);
-            OnLODQualityFactorInput(visParams.LODQualityFactor);
+            OnLODDistancesInput(visParams.LODDistances);
             OnHomogeneityToleranceInput(visParams.HomogeneityTolerance);
             OnTFDropDownChange(m_TFDropDown.options.FindIndex((m) => m.text == visParams.TF.ToString()));
             OnInterDropDownChange(m_InterpolationDropDown.options.FindIndex((m) => m.text == visParams.Interpolation.ToString()));

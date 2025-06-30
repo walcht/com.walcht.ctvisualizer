@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace UnityCTVisualizer
 {
@@ -37,7 +38,7 @@ namespace UnityCTVisualizer
         public static Action<float> ModelOpacityCutoffChange;
         public static Action<INTERPOLATION> ModelInterpolationChange;
         public static Action<float> ModelSamplingQualityFactorChange;
-        public static Action<float> ModelLODQualityFactorChange;
+        public static Action<List<float>> ModelLODDistancesChange;
         public static Action<byte> ModelHomogeneityToleranceChange;
 
         ////////////////////////////////
@@ -47,7 +48,7 @@ namespace UnityCTVisualizer
         public static Action<float> ViewAlphaCutoffChange;
         public static Action<INTERPOLATION> ViewInterpolationChange;
         public static Action<float> ViewSamplingQualityFactorChange;
-        public static Action<float> ViewLODQualityFactorChange;
+        public static Action<List<float>> ViewLODDistancesChange;
         public static Action<byte> ViewHomogeneityToleranceChange;
     }
 }

@@ -12,7 +12,7 @@ namespace UnityCTVisualizer
         NEW_RANDOM_ROTATION_AXIS,
         NEW_RANDOM_LOOK_AT_POINT,
         NEW_HOMOGENEITY_TOLERANCE_VALUE,
-        NEW_LOD_QUALITY_FACTOR,
+        NEW_LOD_DISTANCES,
         BRICK_CACHE_WARMUP_START,
         BRICK_CACHE_WARMUP_END,
         FRAMETIMES_MEASUREMENTS_START,
@@ -75,7 +75,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ModelInterpolationChange += OnInterpolationChange;
             VisualizationParametersEvents.ModelSamplingQualityFactorChange += OnSamplingQualityFactorChange;
             VisualizationParametersEvents.ModelHomogeneityToleranceChange += OnHomogeneityToleranceChange;
-            VisualizationParametersEvents.ModelLODQualityFactorChange += OnLODQualityFactorChange;
+            VisualizationParametersEvents.ModelLODDistancesChange += OnLODDistancesChange;
         }
 
 
@@ -88,7 +88,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ModelInterpolationChange -= OnInterpolationChange;
             VisualizationParametersEvents.ModelSamplingQualityFactorChange -= OnSamplingQualityFactorChange;
             VisualizationParametersEvents.ModelHomogeneityToleranceChange -= OnHomogeneityToleranceChange;
-            VisualizationParametersEvents.ModelLODQualityFactorChange -= OnLODQualityFactorChange;
+            VisualizationParametersEvents.ModelLODDistancesChange -= OnLODDistancesChange;
         }
 
 
@@ -99,7 +99,7 @@ namespace UnityCTVisualizer
             OnSamplingQualityFactorChange(vd.SamplingQualityFactor);
             OnInterpolationChange(vd.InterpolationMethod);
             OnHomogeneityToleranceChange(vd.HomogeneityTolerance);
-            OnLODQualityFactorChange(vd.LODQualityFactor);
+            OnLODDistancesChange(vd.LODDistances);
         }
 
 
@@ -152,13 +152,14 @@ namespace UnityCTVisualizer
         }
 
 
-        protected void OnLODQualityFactorChange(float val)
+        protected void OnLODDistancesChange(List<float> distances)
         {
             m_BenchmarkStats.Events.Add(new()
             {
                 Timestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds(),
-                Type = BenchmarkingEventType.NEW_LOD_QUALITY_FACTOR,
-                Value = val,
+                Type = BenchmarkingEventType.NEW_LOD_DISTANCES,
+                // TODO: ughh, fix this
+                // Value = ,
             });
         }
 

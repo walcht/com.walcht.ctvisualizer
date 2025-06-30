@@ -505,7 +505,7 @@ namespace UnityCTVisualizer
         }
 
         public static void LoadAllBricksIntoCache(CVDSMetadata metadata, int brick_size, int resolution_lvl,
-            MemoryCache<byte> cache, ConcurrentQueue<UInt32> brick_reply_queue, int nbr_importer_threads = -1)
+            MemoryCache<byte> cache, ConcurrentQueue<UInt32> brick_reply_queue, int nbr_importer_threads = -1, bool ignore_inter_brick_interpolation = true)
         {
             long total_nbr_bricks = metadata.NbrChunksPerResolutionLvl[resolution_lvl].x *
                 metadata.NbrChunksPerResolutionLvl[resolution_lvl].y *
@@ -527,7 +527,7 @@ namespace UnityCTVisualizer
             }, i =>
             {
                 UInt32 brick_id = (UInt32)i | (UInt32)resolution_lvl << 26;
-                ImportBrick(metadata, brick_id, brick_size, cache);
+                ImportBrick(metadata, brick_id, brick_size, cache, ignore_inter_brick_interpolation);
                 brick_reply_queue.Enqueue(brick_id);
                 // increment progress value by 1
                 ProgressHandlerEvents.OnRequestProgressValueIncrement?.Invoke();

@@ -1,22 +1,57 @@
 #define BOUNDING_BOX_LONGEST_SEGMENT 1.732050808f  // diagonal of a cube
 #pragma once
 
-inline float3 viewToObjectDir(in float3 dir) {
+#include "UnityCG.cginc"
+
+uniform sampler3D _BrickCache;
+uniform sampler2D _TFColors;
+
+uniform float _AlphaCutoff = 254.0f / 255.0f;
+uniform float _SamplingQualityFactor = 1.0f;
+
+
+struct appdata
+{
+    float4 modelVertex: POSITION;
+    float2 uv: TEXCOORD0;
+    // enable single-pass instanced rendering
+    UNITY_VERTEX_INPUT_INSTANCE_ID
+};
+
+
+struct v2f
+{
+    float4 clipVertex : SV_POSITION;
+    float2 uv: TEXCOORD0;
+    float3 modelVertex : TEXCOORD1;
+    // stereo-rendering related
+    UNITY_VERTEX_OUTPUT_STEREO 
+};
+
+
+inline float3 viewToObjectDir(in float3 dir)
+{
     return normalize(mul((float3x3)unity_WorldToObject, mul((float3x3)UNITY_MATRIX_I_V, dir)));
 }
 
-inline float3 viewToObjectNorm(in float3 norm) {
+
+inline float3 viewToObjectNorm(in float3 norm)
+{
     return normalize(mul(mul((float3x3)UNITY_MATRIX_I_V, norm), (float3x3)unity_ObjectToWorld));
 }
 
-inline float3 viewToObjectPos(in float3 pos) {
+
+inline float3 viewToObjectPos(in float3 pos)
+{
     return mul(unity_WorldToObject, mul(UNITY_MATRIX_I_V, float4(pos, 1.0))).xyz;
 }
+
 
 /// <summary>
 ///   Parametric description of a ray: r = origin + t * direction
 /// </summary>
-struct Ray {
+struct Ray
+{
     // in object space shifted by (0.5, 0.5, 0.5) (i.e., reference is at some
     // edge vertex of the normalized bounding cube)
     float3 origin;
@@ -30,7 +65,8 @@ struct Ray {
 ///   Axis-Aligned Bounding Box (AABB) box. An AABB only needs coordinate of
 ///   its two corner points to fully describe it.
 /// </summary>
-struct Box {
+struct Box
+{
     float3 min;
     float3 max;
 };
@@ -46,7 +82,8 @@ struct Box {
 ///     SLABS is can result in noise - consider adding a small epsilon
 ///     and correctly setting the texture wrap mode.
 /// </remark>
-float slabs(float3 origin, float3 dir, Box b) {
+float slabs(float3 origin, float3 dir, Box b)
+{
     float3 inverseDir = 1.0f / dir;
     float3 t0 = (b.min - origin) * inverseDir;
     float3 t1 = (b.max - origin) * inverseDir;
@@ -67,9 +104,11 @@ float slabs(float3 origin, float3 dir, Box b) {
 ///     is no reason to add checks for null denominator (i.e., ray coincides with
 ///     the camera's near plane).
 /// </remark>
-inline float intersectNearPlane(float3 rayOrigin, float3 rayDir, float3 planePoint, float3 planeNormal) {
+inline float intersectNearPlane(float3 rayOrigin, float3 rayDir, float3 planePoint, float3 planeNormal)
+{
     return dot(planePoint - rayOrigin, planeNormal) / dot(rayDir, planeNormal);
 }
+
 
 ///
 ///     Process only backward-facing triangles
@@ -129,7 +168,9 @@ Ray getRayFromBackface(float3 modelVertex) {
     return ray;
 }
 
-Ray flipRay(Ray ray) {
+
+Ray flipRay(Ray ray)
+{
     Ray flipped_ray;
     flipped_ray.origin = ray.origin + ray.t_out * ray.dir;
     flipped_ray.dir = -ray.dir;

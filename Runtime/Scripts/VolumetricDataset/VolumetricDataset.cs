@@ -48,13 +48,13 @@ namespace UnityCTVisualizer
             }
         }
 
-        private float m_LODQualityFactor = 5.0f;
-        public float LODQualityFactor
+        private List<float> m_LODDistances = new();
+        public List<float> LODDistances
         {
-            get => m_LODQualityFactor; set
+            get => m_LODDistances; set
             {
-                m_LODQualityFactor = Mathf.Clamp(value, 0.10f, 5.0f);
-                VisualizationParametersEvents.ModelLODQualityFactorChange?.Invoke(m_LODQualityFactor);
+                m_LODDistances = value;
+                VisualizationParametersEvents.ModelLODDistancesChange?.Invoke(m_LODDistances);
             }
         }
 
@@ -104,7 +104,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ModelOpacityCutoffChange?.Invoke(m_AlphaCutoff);
             VisualizationParametersEvents.ModelInterpolationChange?.Invoke(m_Interpolation);
             VisualizationParametersEvents.ModelSamplingQualityFactorChange?.Invoke(m_SamplingQualityFactor);
-            VisualizationParametersEvents.ModelLODQualityFactorChange?.Invoke(m_LODQualityFactor);
+            VisualizationParametersEvents.ModelLODDistancesChange?.Invoke(m_LODDistances);
             VisualizationParametersEvents.ModelHomogeneityToleranceChange?.Invoke(m_HomogeneityTolerance);
         }
 
@@ -117,6 +117,14 @@ namespace UnityCTVisualizer
         public void Init(CVDSMetadata metadata)
         {
             m_metadata = metadata;
+            List<float> lod_distances = new();
+            float acc = 0.5f;
+            for (int i = 0; i < m_metadata.NbrResolutionLvls; ++i)
+            {
+                lod_distances.Add(acc);
+                acc += 0.5f;
+            }
+            LODDistances = lod_distances;
         }
 
         /*
@@ -175,7 +183,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ViewTFChange += OnViewTFChange;
             VisualizationParametersEvents.ViewAlphaCutoffChange += OnViewAlphaCutoffChange;
             VisualizationParametersEvents.ViewSamplingQualityFactorChange += OnViewSamplingQualityFactorChange;
-            VisualizationParametersEvents.ViewLODQualityFactorChange += OnViewLODQualityFactorChange;
+            VisualizationParametersEvents.ViewLODDistancesChange += OnViewLODDistancesChange;
             VisualizationParametersEvents.ViewInterpolationChange += OnViewInterpolationChange;
             VisualizationParametersEvents.ViewHomogeneityToleranceChange += OnViewHomogeneityToleranceChange;
         }
@@ -185,7 +193,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ViewTFChange -= OnViewTFChange;
             VisualizationParametersEvents.ViewAlphaCutoffChange -= OnViewAlphaCutoffChange;
             VisualizationParametersEvents.ViewSamplingQualityFactorChange -= OnViewSamplingQualityFactorChange;
-            VisualizationParametersEvents.ViewLODQualityFactorChange -= OnViewLODQualityFactorChange;
+            VisualizationParametersEvents.ViewLODDistancesChange -= OnViewLODDistancesChange;
             VisualizationParametersEvents.ViewInterpolationChange -= OnViewInterpolationChange;
             VisualizationParametersEvents.ViewHomogeneityToleranceChange -= OnViewHomogeneityToleranceChange;
         }
@@ -196,7 +204,7 @@ namespace UnityCTVisualizer
         private void OnViewSamplingQualityFactorChange(float val) => SamplingQualityFactor = val;
 
 
-        private void OnViewLODQualityFactorChange(float val) => LODQualityFactor = val;
+        private void OnViewLODDistancesChange(List<float> distances) => LODDistances = distances;
 
 
         private void OnViewInterpolationChange(INTERPOLATION interpolation) => InterpolationMethod = interpolation;

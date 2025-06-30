@@ -85,14 +85,16 @@ namespace UnityCTVisualizer
         private readonly int SHADER_BRICK_CACHE_DIMS_ID = Shader.PropertyToID("_BrickCacheDims");
         private readonly int SHADER_BRICK_CACHE_NBR_BRICKS = Shader.PropertyToID("_BrickCacheNbrBricks");
         private readonly int SHADER_BRICK_CACHE_VOXEL_SIZE = Shader.PropertyToID("_BrickCacheVoxelSize");
-        private readonly int SHADER_LOD_QUALITY_FACTOR_ID = Shader.PropertyToID("_LODQualityFactor");
+        private readonly int SHADER_LOD_DISTANCES_SQUARED_ID = Shader.PropertyToID("_LODDistancesSquared");
         private readonly int SHADER_MAX_RES_LVL_ID = Shader.PropertyToID("_MaxResLvl");
+        private readonly int SHADER_HOMOGENEITY_TOLERANCE_ID = Shader.PropertyToID("_HomogeneityTolerance");
 
 
         /////////////////////////////////
         // CONSTANT DEFINES
         /////////////////////////////////
         public static readonly UInt32 INVALID_BRICK_ID = 0x80000000;
+        public static readonly UInt32 MAX_ALLOWED_NBR_RESOLUTION_LVLS = 6;
         private const float MM_TO_METERS = 0.001f;
 
 
@@ -276,7 +278,7 @@ namespace UnityCTVisualizer
 
         private float m_alpha_cutoff;
         private float m_sampling_quality_factor;
-        private float m_lod_quality_factor;
+        private float[] m_lod_distances_squared = new float[MAX_ALLOWED_NBR_RESOLUTION_LVLS];
         private byte m_homogeneity_tolerance;
 
         private bool m_IsAlreadyInitialized = false;
@@ -873,7 +875,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ModelTFChange += OnModelTFChange;
             VisualizationParametersEvents.ModelOpacityCutoffChange += OnModelAlphaCutoffChange;
             VisualizationParametersEvents.ModelSamplingQualityFactorChange += OnModelSamplingQualityFactorChange;
-            VisualizationParametersEvents.ModelLODQualityFactorChange += OnModelLODQualityFactorChange;
+            VisualizationParametersEvents.ModelLODDistancesChange += OnModelLODDistancesChange;
             VisualizationParametersEvents.ModelInterpolationChange += OnModelInterpolationChange;
             VisualizationParametersEvents.ModelHomogeneityToleranceChange += OnModelHomogeneityChange;
         }
@@ -883,7 +885,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ModelTFChange -= OnModelTFChange;
             VisualizationParametersEvents.ModelOpacityCutoffChange -= OnModelAlphaCutoffChange;
             VisualizationParametersEvents.ModelSamplingQualityFactorChange -= OnModelSamplingQualityFactorChange;
-            VisualizationParametersEvents.ModelLODQualityFactorChange -= OnModelLODQualityFactorChange;
+            VisualizationParametersEvents.ModelLODDistancesChange -= OnModelLODDistancesChange;
             VisualizationParametersEvents.ModelInterpolationChange -= OnModelInterpolationChange;
             VisualizationParametersEvents.ModelHomogeneityToleranceChange -= OnModelHomogeneityChange;
 
@@ -1349,9 +1351,9 @@ namespace UnityCTVisualizer
                         xoffset = brick_cache_slot_pos.x,
                         yoffset = brick_cache_slot_pos.y,
                         zoffset = brick_cache_slot_pos.z,
-                        width = m_brick_size,
-                        height = m_brick_size,
-                        depth = m_brick_size,
+                        width = m_actual_brick_size,
+                        height = m_actual_brick_size,
+                        depth = m_actual_brick_size,
                         data_ptr = handles[nbr_bricks_uploaded_per_frame].AddrOfPinnedObject(),
                         level = 0,
                         format = m_tex_plugin_format
@@ -1367,11 +1369,11 @@ namespace UnityCTVisualizer
 
                 }  // END WHILE
 
-                GPUUpdatePageTables();
-
                 // we execute the command buffer instantly
                 Graphics.ExecuteCommandBuffer(cmd_buffer);
                 cmd_buffer.Clear();
+
+                GPUUpdatePageTables();
 
                 // increase timestamp
                 ++m_timestamp;
@@ -1402,16 +1404,23 @@ namespace UnityCTVisualizer
             UInt32[] raw_brick_requests = new UInt32[m_PipelineParams.MaxNbrBrickRequestsPerFrame];
             HashSet<UInt32> filtered_brick_requests = new (m_PipelineParams.MaxNbrBrickRequestsPerFrame);
 
+            // add offset for inter-brick interpolation support
+            Vector3 brick_cache_slot_offset = Vector3.zero;
+            if (m_metadata.ChunkPadding)
+            {
+                brick_cache_slot_offset = new Vector3(m_brick_cache_voxel_size.x, m_brick_cache_voxel_size.y, m_brick_cache_voxel_size.z);
+            }
+
             List<BrickCacheUsage> brick_cache_added_slots = new();
             List<BrickCacheUsage> brick_cache_evicted_slots = new();
 
             while (true)
             {
-
                 // wait until current frame rendering is done ...
                 yield return new WaitForEndOfFrame();
 
-                bool page_directory_dity = false;
+                // in case the homogeneity tolerance has changed - update the page table entries accordingly
+                UpdatePageTablesHomogeneity();
 
                 // we can safely assume that bricks uploaded to GPU in previous frame are done
                 nbr_bricks_uploaded += nbr_bricks_uploaded_per_frame;
@@ -1426,15 +1435,18 @@ namespace UnityCTVisualizer
                 GPUGetBrickRequests(raw_brick_requests);
                 GPUResetBrickRequests();
                 FilterBrickRequests(raw_brick_requests, filtered_brick_requests);
+                CheckBrickRequestsCompletionStatus(filtered_brick_requests);
                 ImportBricksIntoMemoryCache(filtered_brick_requests);
 
-                // update CPU brick cache usage and reset it on the GPU
+                // update CPU-side brick cache usage from the GPU and reset it on the GPU
                 GPUGetBrickCacheUsage();
                 GPUResetBrickCacheUsage();
 
                 GPURandomizeBrickRequestsTexOffset();
                 GPUUpdateVisualizationParams();
 
+                brick_cache_added_slots.Clear();
+                brick_cache_evicted_slots.Clear();
 
                 // upload requested bricks to the GPU from the bricks reply queue
                 while (
@@ -1442,48 +1454,87 @@ namespace UnityCTVisualizer
                     m_brick_reply_queue.TryDequeue(out UInt32 brick_id)
                 )
                 {
+                    m_in_flight_brick_imports.TryRemove(brick_id, out byte _);
 
                     // we are sending a managed object to unmanaged thread (i.e., C++) the object has to be pinned
                     // to a fixed location in memory during the plugin call
                     var brick = m_cpu_cache.Get(brick_id);
-                    Assert.IsNotNull(brick);
 
                     // in case the brick is homogeneous, avoid adding it the cache and just update the
                     // corresponding page entry
-                    if (brick.min == brick.max)
+                    if ((brick.max - brick.min) <= m_homogeneity_tolerance)
                     {
-                        page_directory_dity = true;
+                        m_page_dir_dirty = true;
                         UpdatePageTablesHomogeneousBrick(brick_id, brick.min, brick.max);
                         continue;
                     }
 
-                    handles[nbr_bricks_uploaded_per_frame] = GCHandle.Alloc(brick.data, GCHandleType.Pinned);
-
                     // LRU cache eviction scheme; pick least recently used brick cache slot
                     int brick_cache_idx = m_brick_cache_usage_sorted[nbr_bricks_uploaded_per_frame].brick_cache_idx;
                     BrickCacheUsage evicted_slot = m_brick_cache_usage[brick_cache_idx];
+                    if (evicted_slot.timestamp == m_timestamp)
+                    {
+#if DEBUG
+                        Debug.LogWarning("circular brick requests detected!\n" +
+                            "This is caused by an insufficient GPU brick cache size for the set viusalization parameters.\n" +
+                            "To solve this, consider increasing the GPU brick cache size or adjusting the visualization parameters for a lower visual quality.");
+#endif
+                        continue;
+                    }
+                    // check if we are evicting a slot that was used a while ago but is no-longer in-use
+                    if (evicted_slot.brick_id != INVALID_BRICK_ID)
+                    {
+                        // set the alpha component to UNMAPPED so the shader knows
+                        SetPageEntryAlphaChannelData(GetPageTableIndex(evicted_slot.brick_id), PageEntryFlag.UNMAPPED_PAGE_TABLE_ENTRY);
+                        brick_cache_evicted_slots.Add(evicted_slot);
+#if DEBUG
+                        // in case we want to instantiate brick wireframes (useful for debugging)
+                        if (InstantiateBrickWireframes)
+                        {
+                            Destroy(transform.Find($"brick_{evicted_slot.brick_id & 0x03FFFFFF}_res_lvl_{evicted_slot.brick_id >> 26}").gameObject);
+                        }
+#endif
+                    }
+
                     BrickCacheUsage added_slot = new()
                     {
                         brick_id = brick_id,
-                        timestamp = m_timestamp,
-                        brick_cache_idx = brick_cache_idx
+                        // the brick was needed a couple of frames ago - therefore do NOT set the timestamp to current
+                        // timestamp and let the shader decide whether it actually still needs it or not.
+                        timestamp = 0,
+                        brick_cache_idx = brick_cache_idx,
+                        brick_min = brick.min,
+                        brick_max = brick.max
                     };
-                    // check if evicted brick slot is already empty
-
-                    brick_cache_added_slots.Add(added_slot);
                     m_brick_cache_usage[brick_cache_idx] = added_slot;
-                    GetBrickCacheSlotPosition(brick_cache_idx, out Vector3Int brick_cache_slot_pos);
+                    brick_cache_added_slots.Add(added_slot);
 
+                    GetBrickCacheSlotPosition(brick_cache_idx, out Vector3 brick_cache_slot_pos_normalized);
+                    int page_dir_enty_idx = GetPageTableIndex(brick_id);
+                    m_page_dir_data[page_dir_enty_idx] = brick_cache_slot_pos_normalized.x + brick_cache_slot_offset.x;
+                    m_page_dir_data[page_dir_enty_idx + 1] = brick_cache_slot_pos_normalized.y + brick_cache_slot_offset.y;
+                    m_page_dir_data[page_dir_enty_idx + 2] = brick_cache_slot_pos_normalized.z + brick_cache_slot_offset.z;
+                    SetPageEntryAlphaChannelData(page_dir_enty_idx, PageEntryFlag.MAPPED_PAGE_TABLE_ENTRY, added_slot.brick_min, added_slot.brick_max);
+                    m_page_dir_dirty = true;
+#if DEBUG
+                    // in case we want to instantiate brick wireframes (useful for debugging)
+                    if (InstantiateBrickWireframes)
+                    {
+                        OOCAddBrickWireframeObject(brick_id);
+                    }
+#endif
                     // allocate the plugin call's arguments struct
+                    handles[nbr_bricks_uploaded_per_frame] = GCHandle.Alloc(brick.data, GCHandleType.Pinned);
+                    GetBrickCacheSlotPosition(brick_cache_idx, out Vector3Int brick_cache_slot_pos);
                     TextureSubImage3DParams args = new()
                     {
                         texture_handle = m_brick_cache_ptr,
                         xoffset = brick_cache_slot_pos.x,
                         yoffset = brick_cache_slot_pos.y,
                         zoffset = brick_cache_slot_pos.z,
-                        width = m_brick_size,
-                        height = m_brick_size,
-                        depth = m_brick_size,
+                        width = m_actual_brick_size,
+                        height = m_actual_brick_size,
+                        depth = m_actual_brick_size,
                         data_ptr = handles[nbr_bricks_uploaded_per_frame].AddrOfPinnedObject(),
                         level = 0,
                         format = m_tex_plugin_format
@@ -1503,29 +1554,13 @@ namespace UnityCTVisualizer
                 Graphics.ExecuteCommandBuffer(cmd_buffer);
                 cmd_buffer.Clear();
 
-                if (page_directory_dity || (brick_cache_added_slots.Count > 0)
-                    || (brick_cache_evicted_slots.Count > 0))
+                GPUUpdatePageTables();
+
+                if ((brick_cache_added_slots.Count > 0) || (brick_cache_evicted_slots.Count > 0))
                 {
                     // make sure to update the brick cache bricks residency HashSet before updating the residency octree!
                     UpdateBrickCacheResidencyHashSet(brick_cache_added_slots, brick_cache_evicted_slots);
                     GPUUpdateResidencyOctree(brick_cache_added_slots, brick_cache_evicted_slots);
-                    GPUUpdatePageTables();
-#if DEBUG
-                    // in case we want to instantiate brick wireframes (useful for debugging)
-                    if (InstantiateBrickWireframes)
-                    {
-                        foreach (var added_slot in brick_cache_added_slots)
-                        {
-                            OOCAddBrickWireframeObject(added_slot.brick_id);
-                        }
-                        foreach (var evicted_slot in brick_cache_evicted_slots)
-                        {
-                            Destroy(transform.Find($"brick_{evicted_slot.brick_id & 0x03FFFFFF}_res_lvl_{evicted_slot.brick_id >> 26}").gameObject);
-                        }
-                    }
-#endif
-                    brick_cache_added_slots.Clear();
-                    brick_cache_evicted_slots.Clear();
                 }
 
                 // increase timestamp
@@ -1813,21 +1848,20 @@ namespace UnityCTVisualizer
         }
 
 
-        // TODO: remove per-frame heap allocations
+        private List<UInt32> m_overlapping_bricks = new();
+        private List<int> m_leaf_node_indices = new();
+
         private void GPUUpdateResidencyOctree(List<BrickCacheUsage> added_slots, List<BrickCacheUsage> evicted_slots)
         {
 
             m_octree_changed_node_indices.Clear();
 
-            List<UInt32> overlapping_bricks = new();
-            List<int> leaf_node_indices = new();
-
             foreach (var added_slot in added_slots)
             {
-                GetOverlappingLeafNodes(added_slot.brick_id, ref leaf_node_indices);
+                GetOverlappingLeafNodes(added_slot.brick_id, ref m_leaf_node_indices);
                 // mark overlapping leaf nodes as partially mapped in the brick's res level
                 int res_lvl = (int)(added_slot.brick_id >> 26);
-                foreach (int idx in leaf_node_indices)
+                foreach (int idx in m_leaf_node_indices)
                 {
                     UInt32 new_data = m_residency_octree_data[idx].data | (1u << (res_lvl + 16));
                     if (m_residency_octree_data[idx].data != new_data)
@@ -1840,14 +1874,14 @@ namespace UnityCTVisualizer
 
             foreach (var evicted_slot in evicted_slots)
             {
-                GetOverlappingLeafNodes(evicted_slot.brick_id, ref leaf_node_indices);
+                GetOverlappingLeafNodes(evicted_slot.brick_id, ref m_leaf_node_indices);
                 int res_lvl = (int)(evicted_slot.brick_id >> 26);
                 // check if overlapping nodes are still partially mapped
-                foreach (int idx in leaf_node_indices)
+                foreach (int idx in m_leaf_node_indices)
                 {
-                    GetOverlappingBricks(idx, res_lvl, ref overlapping_bricks);
+                    GetOverlappingBricks(idx, res_lvl, ref m_overlapping_bricks);
                     bool at_least_one_brick_in_brick_cache = false;
-                    foreach (UInt32 id in overlapping_bricks)
+                    foreach (UInt32 id in m_overlapping_bricks)
                     {
                         if (m_brick_cache_brick_residency.Contains(id) /* brick is resident in the brick cache */)
                         {
@@ -2096,11 +2130,17 @@ namespace UnityCTVisualizer
         }
 
 
-        private void OnModelLODQualityFactorChange(float value)
+        private void OnModelLODDistancesChange(List<float> distances)
         {
             m_vis_params_dirty = true;
-            m_lod_quality_factor = value;
-            m_lod_quality_factor = value;
+            for (int i = 0; i < distances.Count; ++i)
+            {
+                m_lod_distances_squared[i] = distances[i] * distances[i];
+            }
+            for (int i = distances.Count; i < MAX_ALLOWED_NBR_RESOLUTION_LVLS; ++i)
+            {
+                m_lod_distances_squared[i] = 0;
+            }
         }
 
 
@@ -2111,7 +2151,11 @@ namespace UnityCTVisualizer
 
             m_material.SetFloat(SHADER_ALPHA_CUTOFF_ID, m_alpha_cutoff);
             m_material.SetFloat(SHADER_SAMPLING_QUALITY_FACTOR_ID, m_sampling_quality_factor);
-            m_material.SetFloat(SHADER_LOD_QUALITY_FACTOR_ID, m_lod_quality_factor);
+            m_material.SetFloatArray(SHADER_LOD_DISTANCES_SQUARED_ID, m_lod_distances_squared);
+            if (m_rendering_mode == RenderingMode.OOC_HYBRID)
+            {
+                m_material.SetInteger(SHADER_HOMOGENEITY_TOLERANCE_ID, m_homogeneity_tolerance);
+            }
             m_vis_params_dirty = false;
         }
 
