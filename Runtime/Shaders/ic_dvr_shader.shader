@@ -7,7 +7,6 @@ Shader "UnityCTVisualizer/ic_dvr_shader"
 	    [HideInInspector] _BrickCache("Brick Cache", 3D) = "" {}
         [HideInInspector] _TFColors("Transfer Function Colors Texture", 2D) = "" {}
 		_AlphaCutoff("Opacity Cutoff", Range(0.0, 1.0)) = 0.95
-        _SamplingQualityFactor("Sampling quality factor (multiplier) [type: float]", Range(0.1, 3.0)) = 1.00
 	}
 
 	SubShader {
@@ -23,8 +22,6 @@ Shader "UnityCTVisualizer/ic_dvr_shader"
             #pragma vertex vert
             #pragma fragment frag
             #include "Include/common.cginc"
-
-            float _MaxVolumeDim = 1;
 
             v2f vert(appdata v)
             {
@@ -47,14 +44,13 @@ Shader "UnityCTVisualizer/ic_dvr_shader"
                 // initialize a ray in model space
                 Ray ray = flipRay(getRayFromBackface(interpolated.modelVertex));
 
-                float step_size =  1.0f / (_MaxVolumeDim * _SamplingQualityFactor);
-                float epsilon = step_size / 2.0f;
+                float initial_epsilon = _InitialStepSize * 0.1f;
                 float4 accm_color = float4(0.0f, 0.0f, 0.0f, 0.0f);
 
                 // start from epsilon to avoid out-of-volume rendering artifacts due to
                 // floating point precision
                 [loop]
-                for (float t = epsilon; t < ray.t_out; t += step_size)
+                for (float t = initial_epsilon; t < ray.t_out; t += _InitialStepSize)
                 {
                     float3 accm_ray = ray.origin + ray.dir * t;
 

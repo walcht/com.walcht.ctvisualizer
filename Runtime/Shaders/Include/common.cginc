@@ -7,7 +7,7 @@ uniform sampler3D _BrickCache;
 uniform sampler2D _TFColors;
 
 uniform float _AlphaCutoff = 254.0f / 255.0f;
-uniform float _SamplingQualityFactor = 1.0f;
+uniform float _InitialStepSize = 0.1f;
 
 
 struct appdata

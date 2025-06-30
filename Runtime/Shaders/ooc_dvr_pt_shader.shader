@@ -15,10 +15,9 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
         [HideInInspector] _TFColors("Transfer Function Colors Texture", 2D) = "" {}
         [HideInInspector] _PageDir("Top level multi-resolution page directory", 3D) = "" {}
 		_AlphaCutoff("Opacity Cutoff", Range(0.0, 1.0)) = 0.95
-        _SamplingQualityFactor("Sampling quality factor (multiplier) [type: float]", Range(0.1, 3.0)) = 1.00
         
+        _InitialStepSize("Opacity Cutoff", Float) = 0.95
         _BrickRequestsRandomTex("Brick requests random (uniform) texture", 2D) = "white" {}
-        _LODQualityFactor("LOD quality factor", Range(0.1, 5)) = 3
         _MaxResLvl("Max allowed resolution level (inclusive)", Integer) = 0
         _VolumeTexelSize("Size of one voxel (or texel) in the volumetric dataset", Vector) = (1, 1, 1)
         _BrickCacheDims("Brick cache dimensions [type: int]", Vector) = (1, 1, 1)
@@ -51,9 +50,7 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
                 // initialize a ray in model space
                 Ray ray = flipRay(getRayFromBackface(interpolated.modelVertex));
 
-                // TODO: avoid division by setting initial_step_size directly from the CPU
-                float initial_step_size =  1.0f / (max(_VolumeDims[0].x, max(_VolumeDims[0].y, _VolumeDims[0].z)) * _SamplingQualityFactor);
-                float initial_epsilon = initial_step_size * 0.1f;
+                float initial_epsilon = _InitialStepSize * 0.1f;
                 float4 accm_color = float4(0.0f, 0.0f, 0.0f, 0.0f);
 
                 int4 prev_page_dir_addrs = int4(-1, -1, -1, 0);
@@ -72,7 +69,7 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
                     int res_lvl = chooseDesiredResolutionLevel(accm_ray);
 
                     // adaptive ray sampling technique
-                    float step_size = adpatSamplingDistance(initial_step_size, res_lvl);
+                    float step_size = adpatSamplingDistance(_InitialStepSize, res_lvl);
                     float epsilon = step_size * 0.1f;
 
                     // sample current position

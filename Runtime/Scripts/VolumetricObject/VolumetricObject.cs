@@ -60,7 +60,7 @@ namespace UnityCTVisualizer
         private readonly int SHADER_BRICK_CACHE_TEX_ID = Shader.PropertyToID("_BrickCache");
         private readonly int SHADER_TFTEX_ID = Shader.PropertyToID("_TFColors");
         private readonly int SHADER_ALPHA_CUTOFF_ID = Shader.PropertyToID("_AlphaCutoff");
-        private readonly int SHADER_SAMPLING_QUALITY_FACTOR_ID = Shader.PropertyToID("_SamplingQualityFactor");
+        private readonly int SHADER_INITIAL_STEP_SIZE_ID = Shader.PropertyToID("_InitialStepSize");
 
 
         /////////////////////////////////
@@ -257,6 +257,7 @@ namespace UnityCTVisualizer
         private CVDSMetadata m_metadata;
         private Vector4[] m_nbr_bricks_per_res_lvl;
         private bool m_vis_params_dirty = false;
+        private Vector4[] m_VolumeDims;
 
 
         /////////////////////////////////
@@ -387,6 +388,15 @@ namespace UnityCTVisualizer
                 }
             }
 
+            // set volume dimensions
+            m_VolumeDims = new Vector4[m_metadata.NbrResolutionLvls];
+            for (int i = 0; i < m_VolumeDims.Length; ++i)
+            {
+                m_VolumeDims[i] = new Vector4(Mathf.Ceil(m_metadata.Dims.x / (float)(1 << i)),
+                    Mathf.Ceil(m_metadata.Dims.y / (float)(1 << i)),
+                    Mathf.Ceil(m_metadata.Dims.z / (float)(1 << i)));
+            }
+
             if (m_rendering_mode == RenderingMode.IC)
             {
                 m_cpu_cache = new MemoryCache<byte>(pipelineParams.CPUBrickCacheSizeMBs, m_brick_size_cubed);
@@ -430,10 +440,6 @@ namespace UnityCTVisualizer
                     Debug.LogException(t.Exception);
 #endif
                 }, TaskContinuationOptions.OnlyOnFaulted);
-
-                // set remaning shader properties
-                float max_volume_dims = Mathf.Max(m_metadata.Dims.x, m_metadata.Dims.y, m_metadata.Dims.z);
-                m_material.SetFloat("_MaxVolumeDim", max_volume_dims);
 
                 // scale mesh to match correct dimensions of the original volumetric data
                 m_transform.localScale = new Vector3(
@@ -785,14 +791,7 @@ namespace UnityCTVisualizer
             }
             m_material.SetVectorArray(SHADER_NBR_BRICKS_PER_RES_LVL_ID, m_nbr_bricks_per_res_lvl);
 
-            Vector4[] volume_dims = new Vector4[m_metadata.NbrResolutionLvls];
-            for (int i = 0; i < volume_dims.Length; ++i)
-            {
-                volume_dims[i] = new Vector4(Mathf.Ceil(m_metadata.Dims.x / (float)(1 << i)),
-                    Mathf.Ceil(m_metadata.Dims.y / (float)(1 << i)),
-                    Mathf.Ceil(m_metadata.Dims.z / (float)(1 << i)));
-            }
-            m_material.SetVectorArray(SHADER_VOLUME_DIMS_ID, volume_dims);
+            m_material.SetVectorArray(SHADER_VOLUME_DIMS_ID, m_VolumeDims);
 
             Vector3 volume_texel_size = new(1.0f / m_metadata.Dims.x,
                         1.0f / m_metadata.Dims.y, 1.0f / m_metadata.Dims.z);
@@ -2150,11 +2149,21 @@ namespace UnityCTVisualizer
                 return;
 
             m_material.SetFloat(SHADER_ALPHA_CUTOFF_ID, m_alpha_cutoff);
-            m_material.SetFloat(SHADER_SAMPLING_QUALITY_FACTOR_ID, m_sampling_quality_factor);
-            m_material.SetFloatArray(SHADER_LOD_DISTANCES_SQUARED_ID, m_lod_distances_squared);
-            if (m_rendering_mode == RenderingMode.OOC_HYBRID)
+            switch (m_rendering_mode)
             {
-                m_material.SetInteger(SHADER_HOMOGENEITY_TOLERANCE_ID, m_homogeneity_tolerance);
+                case RenderingMode.IC:
+                {
+                    m_material.SetFloat(SHADER_INITIAL_STEP_SIZE_ID, 1.0f / (Mathf.Max(m_metadata.Dims.x, m_metadata.Dims.y, m_metadata.Dims.z) * m_sampling_quality_factor));
+                    break;
+                }
+                case RenderingMode.OOC_PT:
+                case RenderingMode.OOC_HYBRID:
+                {
+                    m_material.SetFloat(SHADER_INITIAL_STEP_SIZE_ID, 1.0f / (Mathf.Max(m_VolumeDims[0].x, m_VolumeDims[0].y, m_VolumeDims[0].z) * m_sampling_quality_factor));
+                    m_material.SetFloatArray(SHADER_LOD_DISTANCES_SQUARED_ID, m_lod_distances_squared);
+                    m_material.SetInteger(SHADER_HOMOGENEITY_TOLERANCE_ID, m_homogeneity_tolerance);
+                    break;
+                }
             }
             m_vis_params_dirty = false;
         }

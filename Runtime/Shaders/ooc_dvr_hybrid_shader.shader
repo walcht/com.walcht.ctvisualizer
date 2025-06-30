@@ -22,10 +22,9 @@ Shader "UnityCTVisualizer/ooc_dvr_hybrid_shader"
         [HideInInspector] _TFColors("Transfer Function Colors Texture", 2D) = "" {}
         [HideInInspector] _PageDir("Top level multi-resolution page directory", 3D) = "" {}
 		_AlphaCutoff("Opacity Cutoff", Range(0.0, 1.0)) = 0.95
-        _SamplingQualityFactor("Sampling quality factor (multiplier) [type: float]", Range(0.1, 3.0)) = 1.00
 
+        _InitialStepSize("Opacity Cutoff", Float) = 0.95
         _BrickRequestsRandomTex("Brick requests random (uniform) texture", 2D) = "white" {}
-        _LODQualityFactor("LOD quality factor", Range(0.1, 5)) = 3
         _MaxResLvl("Max allowed resolution level (inclusive)", Integer) = 0
         _VolumeTexelSize("Size of one voxel (or texel) in the volumetric dataset", Vector) = (1, 1, 1)
         _BrickCacheDims("Brick cache dimensions [type: int]", Vector) = (1, 1, 1)
@@ -252,8 +251,7 @@ Shader "UnityCTVisualizer/ooc_dvr_hybrid_shader"
                 // initialize a ray in model space
                 Ray ray = flipRay(getRayFromBackface(interpolated.modelVertex));
 
-                float initial_step_size =  1.0f / (max(_VolumeDims[0].x, max(_VolumeDims[0].y, _VolumeDims[0].z)) * _SamplingQualityFactor);
-                float initial_epsilon = initial_step_size * 0.1f;
+                float initial_epsilon = _InitialStepSize * 0.1f;
                 float4 accm_color = float4(0.0f, 0.0f, 0.0f, 0.0f);
 
                 int4 prev_page_dir_addrs = int4(-1, -1, -1, 0);
@@ -273,7 +271,7 @@ Shader "UnityCTVisualizer/ooc_dvr_hybrid_shader"
                     int traversal_depth = chooseTraversalDepth(/* step_size */);
 
                     // adaptive ray sampling technique
-                    float step_size = adpatSamplingDistance(initial_step_size, res_lvl);
+                    float step_size = adpatSamplingDistance(_InitialStepSize, res_lvl);
                     float epsilon = step_size * 0.1f;
 
                     // empty space skipping through residency octree traversal
@@ -288,12 +286,10 @@ Shader "UnityCTVisualizer/ooc_dvr_hybrid_shader"
 
                             // the density has to be normalized in the same manner OpenGL/Vulkan normalizes an R8_UNORM
                             // texture. See: https://www.khronos.org/opengl/wiki/Normalized_Integer
-                            float sampled_density = (residency_octree[node_idx].data & 0xFF) / 255.0f;
+                            float sampled_density = ((residency_octree[node_idx].data & 0xFF) + ((residency_octree[node_idx].data >> 8) & 0xFF)) / (2 * 255.0f);
 
                             // blending
-                            float4 src = tex2Dlod(_TFColors, float4(sampled_density, 0.0f, 0.0f, 0.0f));
-                            src.rgb *= src.a;
-                            accm_color += (1.0f - accm_color.a) * src;
+                            blendToAccmColor(sampled_density, accm_color);
                             break;
                         }
 
@@ -366,7 +362,6 @@ Shader "UnityCTVisualizer/ooc_dvr_hybrid_shader"
                             }
 
                             // tryGetAlternativeBrick(node_idx, accm_ray, res_lvl, brick_pos);
-                            // TODO: doesn't it make more sense to skip entire page directory entry here?
                         }
 
                     }  // END octree traversal loop

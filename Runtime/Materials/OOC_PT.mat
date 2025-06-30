@@ -30,7 +30,7 @@ Material:
     - _BrickRequestsRandomTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0.044299245, y: 0.83961844}
+        m_Offset: {x: 0.4614465, y: -0.35755193}
     - _BumpMap:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -89,6 +89,7 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
+    - _InitialStepSize: 0.00053418806
     - _LODQualityFactor: 0.43108147
     - _Metallic: 0
     - _Mode: 0
