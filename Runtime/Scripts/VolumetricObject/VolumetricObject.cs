@@ -248,6 +248,8 @@ namespace UnityCTVisualizer
         HashSet<int> m_octree_changed_node_indices;
 
         HashSet<UInt32> m_brick_cache_brick_residency;
+        Queue<GameObject> m_brick_wireframes_pool;
+        List<GameObject> m_brick_wireframes_in_use;
 
         /////////////////////////////////
         // CACHED COMPONENTS
@@ -257,7 +259,7 @@ namespace UnityCTVisualizer
         private CVDSMetadata m_metadata;
         private Vector4[] m_nbr_bricks_per_res_lvl;
         private bool m_vis_params_dirty = false;
-        private Vector4[] m_VolumeDims;
+        private Vector4[] m_VolumeDimsPerResLvl;
 
 
         /////////////////////////////////
@@ -389,13 +391,16 @@ namespace UnityCTVisualizer
             }
 
             // set volume dimensions
-            m_VolumeDims = new Vector4[m_metadata.NbrResolutionLvls];
-            for (int i = 0; i < m_VolumeDims.Length; ++i)
+            m_VolumeDimsPerResLvl = new Vector4[m_metadata.NbrResolutionLvls];
+            for (int i = 0; i < m_VolumeDimsPerResLvl.Length; ++i)
             {
-                m_VolumeDims[i] = new Vector4(Mathf.Ceil(m_metadata.Dims.x / (float)(1 << i)),
+                m_VolumeDimsPerResLvl[i] = new Vector4(Mathf.Ceil(m_metadata.Dims.x / (float)(1 << i)),
                     Mathf.Ceil(m_metadata.Dims.y / (float)(1 << i)),
                     Mathf.Ceil(m_metadata.Dims.z / (float)(1 << i)));
             }
+
+            // debugging stuff ...
+            m_wireframe_cube_mesh = WireframeCubeMesh.GenerateMesh();
 
             if (m_rendering_mode == RenderingMode.IC)
             {
@@ -482,6 +487,8 @@ namespace UnityCTVisualizer
 
                 ScaleOOCMesh();
 
+                InitializeBrickWireframesPool();
+
                 if (m_rendering_mode == RenderingMode.OOC_PT)
                 {
                     // finally start the loop
@@ -516,9 +523,6 @@ namespace UnityCTVisualizer
 
             // rotate the volume according to provided Euler angles
             m_transform.localRotation = Quaternion.Euler(m_metadata.EulerRotation);
-
-            // debugging stuff ...
-            m_wireframe_cube_mesh = WireframeCubeMesh.GenerateMesh();
 
             StartCoroutine(InternalInit());
 
@@ -791,7 +795,7 @@ namespace UnityCTVisualizer
             }
             m_material.SetVectorArray(SHADER_NBR_BRICKS_PER_RES_LVL_ID, m_nbr_bricks_per_res_lvl);
 
-            m_material.SetVectorArray(SHADER_VOLUME_DIMS_ID, m_VolumeDims);
+            m_material.SetVectorArray(SHADER_VOLUME_DIMS_ID, m_VolumeDimsPerResLvl);
 
             Vector3 volume_texel_size = new(1.0f / m_metadata.Dims.x,
                         1.0f / m_metadata.Dims.y, 1.0f / m_metadata.Dims.z);
@@ -824,6 +828,22 @@ namespace UnityCTVisualizer
                  MM_TO_METERS * m_metadata.VoxelDims.z * m_metadata.Dims.z
             );
         }
+
+
+        private void InitializeBrickWireframesPool()
+        {
+            int max_nbr_brick_wireframes = m_gpu_brick_cache_nbr_bricks.x * m_gpu_brick_cache_nbr_bricks.y * m_gpu_brick_cache_nbr_bricks.z;
+            m_brick_wireframes_pool = new(max_nbr_brick_wireframes);
+            m_brick_wireframes_in_use = new(max_nbr_brick_wireframes);
+            for (int i = 0; i < max_nbr_brick_wireframes; ++i)
+            {
+                var go = GameObject.Instantiate(m_BrickWireframePrefab, gameObject.transform, false);
+                go.GetComponent<MeshFilter>().sharedMesh = m_wireframe_cube_mesh;
+                go.SetActive(false);
+                m_brick_wireframes_pool.Enqueue(go);
+            }
+        }
+
 
         private IEnumerator InternalInit()
         {
@@ -1032,10 +1052,6 @@ namespace UnityCTVisualizer
                     m_tex_params_pool.Acquire(args, out IntPtr arg_ptr);
                     cmd_buffer.IssuePluginEventAndData(API.GetRenderEventFunc(), (int)TextureSubPlugin.Event.TextureSubImage3D,
                         arg_ptr);
-
-#if DEBUG_VERBOSE_2
-                    Debug.Log($"brick id: i={brick_id}; volume offset: x={x} y={y} z={z}");
-#endif
 
                     if (InstantiateBrickWireframes)
                     {
@@ -1306,13 +1322,6 @@ namespace UnityCTVisualizer
                     {
                         // set the alpha component to UNMAPPED so the shader knows
                         SetPageEntryAlphaChannelData(GetPageTableIndex(evicted_slot.brick_id), PageEntryFlag.UNMAPPED_PAGE_TABLE_ENTRY);
-#if DEBUG
-                        // in case we want to instantiate brick wireframes (useful for debugging)
-                        if (InstantiateBrickWireframes)
-                        {
-                            Destroy(transform.Find($"brick_{evicted_slot.brick_id & 0x03FFFFFF}_res_lvl_{evicted_slot.brick_id >> 26}").gameObject);
-                        }
-#endif
                     }
 
                     BrickCacheUsage added_slot = new()
@@ -1334,13 +1343,7 @@ namespace UnityCTVisualizer
                     m_page_dir_data[page_dir_enty_idx + 2] = brick_cache_slot_pos_normalized.z + brick_cache_slot_offset.z;
                     SetPageEntryAlphaChannelData(page_dir_enty_idx, PageEntryFlag.MAPPED_PAGE_TABLE_ENTRY, added_slot.brick_min, added_slot.brick_max);
                     m_page_dir_dirty = true;
-#if DEBUG
-                    // in case we want to instantiate brick wireframes (useful for debugging)
-                    if (InstantiateBrickWireframes)
-                    {
-                        OOCAddBrickWireframeObject(brick_id);
-                    }
-#endif
+
                     // allocate the plugin call's arguments struct
                     handles[nbr_bricks_uploaded_per_frame] = GCHandle.Alloc(brick.data, GCHandleType.Pinned);
                     GetBrickCacheSlotPosition(brick_cache_idx, out Vector3Int brick_cache_slot_pos);
@@ -1361,9 +1364,6 @@ namespace UnityCTVisualizer
                     cmd_buffer.IssuePluginEventAndData(API.GetRenderEventFunc(), (int)TextureSubPlugin.Event.TextureSubImage3D,
                         arg_ptr);
 
-#if DEBUG_VERBOSE_2
-                    Debug.Log($"brick id: {brick_id}; brick cache offset: x={brick_cache_slot_pos.x} y={brick_cache_slot_pos.y} z={brick_cache_slot_pos.z}");
-#endif
                     ++nbr_bricks_uploaded_per_frame;
 
                 }  // END WHILE
@@ -1486,13 +1486,6 @@ namespace UnityCTVisualizer
                         // set the alpha component to UNMAPPED so the shader knows
                         SetPageEntryAlphaChannelData(GetPageTableIndex(evicted_slot.brick_id), PageEntryFlag.UNMAPPED_PAGE_TABLE_ENTRY);
                         brick_cache_evicted_slots.Add(evicted_slot);
-#if DEBUG
-                        // in case we want to instantiate brick wireframes (useful for debugging)
-                        if (InstantiateBrickWireframes)
-                        {
-                            Destroy(transform.Find($"brick_{evicted_slot.brick_id & 0x03FFFFFF}_res_lvl_{evicted_slot.brick_id >> 26}").gameObject);
-                        }
-#endif
                     }
 
                     BrickCacheUsage added_slot = new()
@@ -1515,13 +1508,7 @@ namespace UnityCTVisualizer
                     m_page_dir_data[page_dir_enty_idx + 2] = brick_cache_slot_pos_normalized.z + brick_cache_slot_offset.z;
                     SetPageEntryAlphaChannelData(page_dir_enty_idx, PageEntryFlag.MAPPED_PAGE_TABLE_ENTRY, added_slot.brick_min, added_slot.brick_max);
                     m_page_dir_dirty = true;
-#if DEBUG
-                    // in case we want to instantiate brick wireframes (useful for debugging)
-                    if (InstantiateBrickWireframes)
-                    {
-                        OOCAddBrickWireframeObject(brick_id);
-                    }
-#endif
+
                     // allocate the plugin call's arguments struct
                     handles[nbr_bricks_uploaded_per_frame] = GCHandle.Alloc(brick.data, GCHandleType.Pinned);
                     GetBrickCacheSlotPosition(brick_cache_idx, out Vector3Int brick_cache_slot_pos);
@@ -1542,9 +1529,6 @@ namespace UnityCTVisualizer
                     cmd_buffer.IssuePluginEventAndData(API.GetRenderEventFunc(), (int)TextureSubPlugin.Event.TextureSubImage3D,
                         arg_ptr);
 
-#if DEBUG_VERBOSE_2
-                    Debug.Log($"brick id: {brick_id}; brick cache offset: x={brick_cache_slot_pos.x} y={brick_cache_slot_pos.y} z={brick_cache_slot_pos.z}");
-#endif
                     ++nbr_bricks_uploaded_per_frame;
 
                 }  // END WHILE
@@ -1570,7 +1554,6 @@ namespace UnityCTVisualizer
         }  // END COROUTINE
 
 
-#if DEBUG
         /// <summary>
         ///     Adds a wireframe object to denote the spatial extent of the provided brick.
         ///     Useful for debugging purposes and observing out-of-core GPU brick loading.
@@ -1581,9 +1564,9 @@ namespace UnityCTVisualizer
             int res_lvl = (int)(brick_id >> 26);
 
             Vector3 brick_scale = new(
-                (m_brick_size << res_lvl) / (float)(m_metadata.Dims.x),
-                (m_brick_size << res_lvl) / (float)(m_metadata.Dims.y),
-                (m_brick_size << res_lvl) / (float)(m_metadata.Dims.z)
+                m_brick_size / m_VolumeDimsPerResLvl[res_lvl].x,
+                m_brick_size / m_VolumeDimsPerResLvl[res_lvl].y,
+                m_brick_size / m_VolumeDimsPerResLvl[res_lvl].z
             );
 
             // transition to Unity's Texture3D coordinate system
@@ -1592,17 +1575,17 @@ namespace UnityCTVisualizer
             int y = m_brick_size * ((id / (int)nbr_bricks.x) % (int)nbr_bricks.y);
             int z = m_brick_size * (id / ((int)nbr_bricks.x * (int)nbr_bricks.y));
 
-            GameObject brick_wireframe = Instantiate(m_BrickWireframePrefab, gameObject.transform, false);
-            brick_wireframe.GetComponent<MeshFilter>().sharedMesh = m_wireframe_cube_mesh;
+            GameObject brick_wireframe = m_brick_wireframes_pool.Dequeue();
             brick_wireframe.transform.localPosition = new Vector3(
-                (x / (float)(m_metadata.Dims.x) - 0.5f) + brick_scale.x / 2.0f,
-                (y / (float)(m_metadata.Dims.y) - 0.5f) + brick_scale.y / 2.0f,
-                (z / (float)(m_metadata.Dims.z) - 0.5f) + brick_scale.z / 2.0f
+                (x / m_VolumeDimsPerResLvl[res_lvl].x - 0.5f) + brick_scale.x / 2.0f,
+                (y / m_VolumeDimsPerResLvl[res_lvl].y - 0.5f) + brick_scale.y / 2.0f,
+                (z / m_VolumeDimsPerResLvl[res_lvl].z - 0.5f) + brick_scale.z / 2.0f
             );
             brick_wireframe.transform.localScale = brick_scale;
-            brick_wireframe.name = $"brick_{brick_id & 0x03FFFFFF}_res_lvl_{brick_id >> 26}";
+            // brick_wireframe.name = $"brick_{brick_id & 0x03FFFFFF}_res_lvl_{brick_id >> 26}";
+            brick_wireframe.SetActive(true);
+            m_brick_wireframes_in_use.Add(brick_wireframe);
         }
-#endif
 
 
         /// <summary>
@@ -1624,6 +1607,18 @@ namespace UnityCTVisualizer
         private void GPUGetBrickCacheUsage()
         {
             m_brick_cache_usage_cb.GetData(m_brick_cache_usage_tmp);
+
+            // in case we want to instantiate brick wireframes (useful for debugging)
+            if (InstantiateBrickWireframes)
+            {
+                foreach (var go in m_brick_wireframes_in_use)
+                {
+                    go.SetActive(false);
+                    m_brick_wireframes_pool.Enqueue(go);
+                }
+                m_brick_wireframes_in_use.Clear();
+            }
+
             for (int i = 0; i < m_brick_cache_usage_tmp.Length; ++i)
             {
                 if (m_brick_cache_usage_tmp[i] == 0)
@@ -1638,6 +1633,12 @@ namespace UnityCTVisualizer
                     if (((m_brick_cache_usage_tmp[i] >> j) & 0x1) == 1)
                     {
                         m_brick_cache_usage[brick_idx].timestamp = m_timestamp;
+
+                        // in case we want to instantiate brick wireframes (useful for debugging)
+                        if (InstantiateBrickWireframes)
+                        {
+                            OOCAddBrickWireframeObject(m_brick_cache_usage[brick_idx].brick_id);
+                        }
                     }
                 }
             }
@@ -2159,7 +2160,7 @@ namespace UnityCTVisualizer
                 case RenderingMode.OOC_PT:
                 case RenderingMode.OOC_HYBRID:
                 {
-                    m_material.SetFloat(SHADER_INITIAL_STEP_SIZE_ID, 1.0f / (Mathf.Max(m_VolumeDims[0].x, m_VolumeDims[0].y, m_VolumeDims[0].z) * m_sampling_quality_factor));
+                    m_material.SetFloat(SHADER_INITIAL_STEP_SIZE_ID, 1.0f / (Mathf.Max(m_VolumeDimsPerResLvl[0].x, m_VolumeDimsPerResLvl[0].y, m_VolumeDimsPerResLvl[0].z) * m_sampling_quality_factor));
                     m_material.SetFloatArray(SHADER_LOD_DISTANCES_SQUARED_ID, m_lod_distances_squared);
                     m_material.SetInteger(SHADER_HOMOGENEITY_TOLERANCE_ID, m_homogeneity_tolerance);
                     break;
