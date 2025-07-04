@@ -7,7 +7,8 @@
   "keywords": [
     "ct",
     "mri",
-    "volume rendering"
+    "volume rendering",
+    "out-of-core rendering"
   ],
   "author": {
     "name": "Walid Chtioui",
@@ -17,20 +18,15 @@
   "samples": [
     {
       "displayName": "Desktop CT Visualizer",
-      "description": "CT Visualizer sample for Windows/Linux target builds",
+      "description": "CT Visualizer sample for Windows/Linux target builds:\n",
       "path": "Samples~/desktop"
     },
     {
       "displayName": "XR MagicLeap2 CT Visualizer",
-      "description": "CT Visualizer XR sample for the Magic Leap 2 device target builds",
+      "description": "CT Visualizer XR sample for the Magic Leap 2 device target builds\n\nDependencies:\n\t- Magic Leap 2 SDK: https://github.com/magicleap/MagicLeapUnitySDK.git",
       "path": "./Samples~/magicleap2"
     }
   ],
-  "dependencies": {
-    "com.unity.xr.interaction.toolkit": "3.0.7",
-    "com.unity.xr.arfoundation": "6.0.5",
-    "com.unity.xr.openxr": "1.14.1"
-  },
   "git-dependencies": [
     {
       "name": "HSV Color Picker",
