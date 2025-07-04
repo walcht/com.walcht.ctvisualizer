@@ -102,6 +102,6 @@ MonoBehaviour:
   IC_MAT: {fileID: 2100000, guid: f8f0ac0f4d4338144b4b71d5929aa5f6, type: 2}
   OOC_HYBRID_MAT: {fileID: 2100000, guid: 156b48a9d180ff8418f092c2290138d8, type: 2}
   OOC_PT_MAT: {fileID: 2100000, guid: 4de6a7c3a51eecd4f9a7bc7409e3eccb, type: 2}
-  m_BrickWireframePrefab: {fileID: 0}
+  m_BrickWireframePrefab: {fileID: 4892012301941521694, guid: 849307a6568aa3540950412a75d20762, type: 3}
   InstantiateBrickWireframes: 0
   ForceNativeTextureCreation: 0

@@ -49,7 +49,7 @@ public class VolumetricObjectController : MonoBehaviour
         if (m_LeftHandRotationActionRef.action.IsPressed())
         {
             var val = m_LeftHandRotationActionRef.action.ReadValue<Quaternion>();
-            Vector3 diff = (val.eulerAngles - m_PrevRotation) * RotationSpeed * Time.deltaTime;
+            Vector3 diff = RotationSpeed * Time.deltaTime * (val.eulerAngles - m_PrevRotation);
             m_Transform.Rotate(diff, Space.Self);
             m_PrevRotation = val.eulerAngles;
         }
