@@ -56,7 +56,7 @@ namespace UnityCTVisualizer
                 if (m_ProgressBarDirty)
                 {
                     m_ProgressBar.anchorMax = new Vector2(m_ProgressBarPercentage, 1.0f);
-                    m_ProgressBarImg.color = Color.Lerp(m_EmptyBrickCacheColor, m_FullBrickCacheColor, m_ProgressBarPercentage);
+                    m_ProgressBarImg.color = Color.Lerp(m_EmptyBrickCacheColor, m_FullBrickCacheColor, Mathf.Clamp01((m_ProgressBarPercentage - 0.5f) * 2));
                     m_ProgressBarText.text = $"{Mathf.RoundToInt(m_NbrGPUBricksUsed * m_BrickSizeInMBs)}/{Mathf.RoundToInt(m_TotalNbrGPUBricks * m_BrickSizeInMBs)}MB {Mathf.FloorToInt(m_ProgressBarPercentage * 100.0f)} %";
                     m_ProgressBarDirty = false;
                 }
