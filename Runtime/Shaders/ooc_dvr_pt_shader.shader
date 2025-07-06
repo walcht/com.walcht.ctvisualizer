@@ -39,6 +39,7 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
             #pragma target 5.0
             #pragma vertex vert
             #pragma fragment frag
+//          #define EXPLOIT_SPATIAL_COHERENCY_FOR_PTS_ON
             #include "Include/ooc_common.cginc"
 
 
@@ -52,8 +53,9 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
 
                 float initial_epsilon = _InitialStepSize * 0.1f;
                 float4 accm_color = float4(0.0f, 0.0f, 0.0f, 0.0f);
-
+#ifdef EXPLOIT_SPATIAL_COHERENCY_FOR_PTS_ON
                 int4 prev_page_dir_addrs = int4(-1, -1, -1, 0);
+#endif
                 float4 page_dir_entry;
 
 #if VISUALIZE_RANDOM_BRICK_REQUESTS_TEX
@@ -76,14 +78,16 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
                     float sampled_density = 0.0f;
                     int4 page_dir_addrs = getPageDirAddrs(accm_ray, res_lvl);
 
-                    // TODO: does this improve the performance or worsens it?
+#ifdef EXPLOIT_SPATIAL_COHERENCY_FOR_PTS_ON
                     // exploit spatial coherency to avoid expensive texture lookups
                     if (any(page_dir_addrs != prev_page_dir_addrs))
                     {
                         page_dir_entry = _PageDir.Load(page_dir_addrs);
                         prev_page_dir_addrs = page_dir_addrs;
                     }
-
+#else
+                    page_dir_entry = _PageDir.Load(page_dir_addrs);
+#endif
                     uint paging_flag = asuint(page_dir_entry.w) & 0x000000FF;
 
                     if (paging_flag == MAPPED_PAGE_TABLE_ENTRY)
