@@ -285,6 +285,8 @@ namespace UnityCTVisualizer
         private byte m_homogeneity_tolerance;
 
         private bool m_IsAlreadyInitialized = false;
+        private int m_NbrBrickRequestsPrevFrame = -1;
+        private int m_NbrBricksUsedPrevFrame = -1;
 
 
         private void Awake()
@@ -1123,6 +1125,7 @@ namespace UnityCTVisualizer
         /// </param>
         private void FilterBrickRequests(UInt32[] raw_brick_requests, HashSet<UInt32> filtered_brick_requests)
         {
+            int nbr_brick_requests_this_frame = 0;
             filtered_brick_requests.Clear();
             foreach (UInt32 brick_id in raw_brick_requests)
             {
@@ -1136,6 +1139,7 @@ namespace UnityCTVisualizer
                     && page_entry_flag == PageEntryFlag.UNMAPPED_PAGE_TABLE_ENTRY)
                 {
                     filtered_brick_requests.Add(brick_id);
+                    ++nbr_brick_requests_this_frame;
                 }
                 else if (m_cpu_cache.Contains(brick_id) && !m_in_flight_brick_imports.ContainsKey(brick_id)
                     && page_entry_flag == PageEntryFlag.UNMAPPED_PAGE_TABLE_ENTRY && !m_brick_reply_queue.Contains(brick_id))
@@ -1143,7 +1147,13 @@ namespace UnityCTVisualizer
                     // update the internal LRU timestamp so that this doesn't get discarded
                     m_cpu_cache.Get(brick_id);
                     m_brick_reply_queue.Enqueue(brick_id);
+                    ++nbr_brick_requests_this_frame;
                 }
+            }
+            if (nbr_brick_requests_this_frame != m_NbrBrickRequestsPrevFrame)
+            {
+                PipelineStatEvents.ModelNbrBrickRequestsChange?.Invoke(nbr_brick_requests_this_frame);
+                m_NbrBrickRequestsPrevFrame = nbr_brick_requests_this_frame;
             }
         }
 
@@ -1606,6 +1616,7 @@ namespace UnityCTVisualizer
         /// </summary>
         private void GPUGetBrickCacheUsage()
         {
+            int nbr_bricks_used_this_frame = 0;
             m_brick_cache_usage_cb.GetData(m_brick_cache_usage_tmp);
 
             // in case we want to instantiate brick wireframes (useful for debugging)
@@ -1639,6 +1650,7 @@ namespace UnityCTVisualizer
                         {
                             OOCAddBrickWireframeObject(m_brick_cache_usage[brick_idx].brick_id);
                         }
+                        ++nbr_bricks_used_this_frame;
                     }
                 }
             }
@@ -1647,6 +1659,13 @@ namespace UnityCTVisualizer
             m_brick_cache_usage.CopyTo(m_brick_cache_usage_sorted, 0);
             Array.Sort(m_brick_cache_usage_sorted, (BrickCacheUsage a, BrickCacheUsage b)
                 => a.timestamp.CompareTo(b.timestamp));
+            if (nbr_bricks_used_this_frame != m_NbrBricksUsedPrevFrame)
+            {
+                PipelineStatEvents.ModelGPUBrickCacheUsageChange?.Invoke(nbr_bricks_used_this_frame,
+                    m_gpu_brick_cache_nbr_bricks.x * m_gpu_brick_cache_nbr_bricks.y * m_gpu_brick_cache_nbr_bricks.z,
+                    m_brick_size_cubed);
+                m_NbrBricksUsedPrevFrame = nbr_bricks_used_this_frame;
+            }
         }
 
 
@@ -1940,6 +1959,7 @@ namespace UnityCTVisualizer
             if ((x >= m_page_dir_dims[res_lvl].x) || (y >= m_page_dir_dims[res_lvl].y)
                 || (z >= m_page_dir_dims[res_lvl].z))
             {
+                // TODO: this error pops up rarely - figure out why and fix it!
                 throw new Exception("provided brick is outside the range of bricks covered by the page table(s)");
             }
 
