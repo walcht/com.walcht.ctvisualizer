@@ -67,7 +67,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 98aa0e4420d717547a8c6ad92f67baf1, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 5ef4f9d078daab945b13eb460feff4c6, type: 3}
   m_Type: 0
   m_PreserveAspect: 1
   m_FillCenter: 1
@@ -134,7 +134,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_IgnoreLayout: 0
-  m_MinWidth: 30
+  m_MinWidth: 17
   m_MinHeight: -1
   m_PreferredWidth: -1
   m_PreferredHeight: -1
@@ -318,7 +318,7 @@ MonoBehaviour:
     m_HighlightedSprite: {fileID: 21300000, guid: 77fc90c51d4885243bbd7c417788d7c1, type: 3}
     m_PressedSprite: {fileID: 21300000, guid: 77fc90c51d4885243bbd7c417788d7c1, type: 3}
     m_SelectedSprite: {fileID: 21300000, guid: 77fc90c51d4885243bbd7c417788d7c1, type: 3}
-    m_DisabledSprite: {fileID: 21300000, guid: 3f1bb04ea423d394e9e2c0cc61429385, type: 3}
+    m_DisabledSprite: {fileID: 21300000, guid: 4727317b10a33a64f97fff0ab068770a, type: 3}
   m_AnimationTriggers:
     m_NormalTrigger: Normal
     m_HighlightedTrigger: Highlighted
@@ -723,7 +723,7 @@ Canvas:
   serializedVersion: 3
   m_RenderMode: 1
   m_Camera: {fileID: 0}
-  m_PlaneDistance: 100
+  m_PlaneDistance: 5
   m_PixelPerfect: 0
   m_ReceivesEvents: 1
   m_OverrideSorting: 0
@@ -2641,6 +2641,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 3413452920354307947}
     m_Modifications:
+    - target: {fileID: 2815515222219173158, guid: 4a5612fb27cc1db449006541be60616e, type: 3}
+      propertyPath: m_Sprite
+      value: 
+      objectReference: {fileID: 21300000, guid: 52a583e4007a0da4799297b03a57cec0, type: 3}
     - target: {fileID: 6067515793328526652, guid: 4a5612fb27cc1db449006541be60616e, type: 3}
       propertyPath: m_Pivot.x
       value: 1
