@@ -39,11 +39,12 @@ namespace UnityCTVisualizer
         }
 
         private float m_SamplingQualityFactor = 1.0f;
+        public static readonly Vector2 SamplingQualityFactorRange = new(0.05f, 1.25f);
         public float SamplingQualityFactor
         {
             get => m_SamplingQualityFactor; set
             {
-                m_SamplingQualityFactor = Mathf.Clamp(value, 0.5f, 3.0f);
+                m_SamplingQualityFactor = Mathf.Clamp(value, SamplingQualityFactorRange.x, SamplingQualityFactorRange.y);
                 VisualizationParametersEvents.ModelSamplingQualityFactorChange?.Invoke(m_SamplingQualityFactor);
             }
         }

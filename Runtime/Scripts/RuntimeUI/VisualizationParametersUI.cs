@@ -115,14 +115,14 @@ namespace UnityCTVisualizer
 
             m_PerspectiveToggle.isOn = !Camera.main.orthographic;
 
-            m_OpacityCutoffSlider.minValue = 0.0f;
-            m_OpacityCutoffSlider.maxValue = 1.0f;
+            m_OpacityCutoffSlider.minValue = 0;
+            m_OpacityCutoffSlider.maxValue = 255;
             m_OpacityCutoffInputField.readOnly = false;
-            m_OpacityCutoffInputField.contentType = TMP_InputField.ContentType.DecimalNumber;
+            m_OpacityCutoffInputField.contentType = TMP_InputField.ContentType.IntegerNumber;
 
 
-            m_SamplingQualityFactorSlider.minValue = 0.5f;
-            m_SamplingQualityFactorSlider.maxValue = 3.0f;
+            m_SamplingQualityFactorSlider.minValue = VolumetricDataset.SamplingQualityFactorRange.x;
+            m_SamplingQualityFactorSlider.maxValue = VolumetricDataset.SamplingQualityFactorRange.y;
             m_SamplingQualityFactorInputField.readOnly = false;
             m_SamplingQualityFactorInputField.contentType = TMP_InputField.ContentType.DecimalNumber;
 
@@ -262,10 +262,10 @@ namespace UnityCTVisualizer
         }
 
 
-        private void OnOpacityCutoffInput(float val) => VisualizationParametersEvents.ViewAlphaCutoffChange?.Invoke(val);
+        private void OnOpacityCutoffInput(float val) => VisualizationParametersEvents.ViewAlphaCutoffChange?.Invoke(val / 255.0f);
 
 
-        private void OnOpacityCutoffInput(string val) => VisualizationParametersEvents.ViewAlphaCutoffChange?.Invoke(float.Parse(val));
+        private void OnOpacityCutoffInput(string val) => VisualizationParametersEvents.ViewAlphaCutoffChange?.Invoke(float.Parse(val) / 255.0f);
 
 
         private void OnSamplingQualityFactorInput(float val) => VisualizationParametersEvents.ViewSamplingQualityFactorChange?.Invoke(val);
@@ -293,8 +293,9 @@ namespace UnityCTVisualizer
 
         private void OnModelOpacityCutoffChange(float value)
         {
-            m_OpacityCutoffSlider.SetValueWithoutNotify(value);
-            m_OpacityCutoffInputField.SetTextWithoutNotify(value.ToString("0.00"));
+            int v = Mathf.RoundToInt(value * 255);
+            m_OpacityCutoffSlider.SetValueWithoutNotify(v);
+            m_OpacityCutoffInputField.SetTextWithoutNotify(v.ToString());
         }
 
 
