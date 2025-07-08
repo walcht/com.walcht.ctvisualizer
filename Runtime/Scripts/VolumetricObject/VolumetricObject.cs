@@ -1640,8 +1640,11 @@ namespace UnityCTVisualizer
                 for (int j = 0; (j < 32) && (i * 32 + j < m_brick_cache_usage.Length); ++j)
                 {
                     int brick_idx = i * 32 + j;
-                    // filter unused brick slots
-                    if (((m_brick_cache_usage_tmp[i] >> j) & 0x1) == 1)
+                    // filter unused brick slots - it could be that a brick cache slot is reported to be
+                    // used by the GPU but just before retrieving the data, the homogeneity measure changed
+                    // and it became no longer used.
+                    if ((((m_brick_cache_usage_tmp[i] >> j) & 0x1) == 1)
+                        && (m_brick_cache_usage[brick_idx].brick_id != INVALID_BRICK_ID))
                     {
                         m_brick_cache_usage[brick_idx].timestamp = m_timestamp;
 
