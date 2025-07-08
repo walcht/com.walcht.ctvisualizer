@@ -166,8 +166,8 @@ namespace UnityCTVisualizer
                 {
                     // fill brick cache size options
                     List<TMP_Dropdown.OptionData> opts = new();
-                    int granularity = 256;
-                    for (int i = 1; (i * granularity) <= SystemInfo.systemMemorySize; ++i)
+                    int granularity = 128;
+                    for (int i = 1; (i * granularity) <= SystemInfo.graphicsMemorySize; ++i)
                     {
                         opts.Add(new((i * granularity).ToString()));
                     }
@@ -193,8 +193,9 @@ namespace UnityCTVisualizer
                 {
                     // fill CPU brick cache size options
                     List<TMP_Dropdown.OptionData> opts = new();
-                    for (int i = 1; i * 512 < SystemInfo.systemMemorySize; ++i)
-                        opts.Add(new((i * 512).ToString()));
+                    int granularity = 512;
+                    for (int i = 1; (i * granularity) < SystemInfo.systemMemorySize; ++i)
+                        opts.Add(new((i * granularity).ToString()));
                     m_CPUBrickCacheSize.options = opts;
                 }
 
