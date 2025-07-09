@@ -55,6 +55,14 @@ namespace UnityCTVisualizer
             get => m_LODDistances; set
             {
                 m_LODDistances = value;
+                for (int i = 0; i < m_LODDistances.Count - 1; ++i)
+                {
+                    // make sure LOD distances are sorted
+                    if (m_LODDistances[i] > m_LODDistances[i + 1])
+                    {
+                        m_LODDistances[i] = m_LODDistances[i + 1];
+                    }
+                }
                 VisualizationParametersEvents.ModelLODDistancesChange?.Invoke(m_LODDistances);
             }
         }
@@ -68,6 +76,19 @@ namespace UnityCTVisualizer
             {
                 m_HomogeneityTolerance = value;
                 VisualizationParametersEvents.ModelHomogeneityToleranceChange?.Invoke(m_HomogeneityTolerance);
+            }
+        }
+
+
+        private float m_VolumetricObjectScaleFactor = 1;
+        public static readonly Vector2 VolumetricObjectScaleFactorRange = new(0.10f, 5.0f);
+        public float VolumetricObjectScaleFactor
+        {
+            get => m_VolumetricObjectScaleFactor;
+            set
+            {
+                m_VolumetricObjectScaleFactor = Mathf.Clamp(value, VolumetricObjectScaleFactorRange.x, VolumetricObjectScaleFactorRange.y);
+                VisualizationParametersEvents.ModelVolumetricObjectScaleFactorChange?.Invoke(m_VolumetricObjectScaleFactor);
             }
         }
 
@@ -107,6 +128,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ModelSamplingQualityFactorChange?.Invoke(m_SamplingQualityFactor);
             VisualizationParametersEvents.ModelLODDistancesChange?.Invoke(m_LODDistances);
             VisualizationParametersEvents.ModelHomogeneityToleranceChange?.Invoke(m_HomogeneityTolerance);
+            VisualizationParametersEvents.ModelVolumetricObjectScaleFactorChange?.Invoke(m_VolumetricObjectScaleFactor);
         }
 
         /////////////////////////////////
@@ -120,7 +142,7 @@ namespace UnityCTVisualizer
             m_metadata = metadata;
             List<float> lod_distances = new();
             float acc = 0.5f;
-            for (int i = 0; i < m_metadata.NbrResolutionLvls; ++i)
+            for (int i = 0; i < m_metadata.NbrResolutionLvls - 1; ++i)
             {
                 lod_distances.Add(acc);
                 acc += 0.5f;
@@ -187,6 +209,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ViewLODDistancesChange += OnViewLODDistancesChange;
             VisualizationParametersEvents.ViewInterpolationChange += OnViewInterpolationChange;
             VisualizationParametersEvents.ViewHomogeneityToleranceChange += OnViewHomogeneityToleranceChange;
+            VisualizationParametersEvents.ViewVolumetricObjectScaleFactorChange += OnViewVolumetricObjectScaleFactorChange;
         }
 
         private void OnDisable()
@@ -197,6 +220,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ViewLODDistancesChange -= OnViewLODDistancesChange;
             VisualizationParametersEvents.ViewInterpolationChange -= OnViewInterpolationChange;
             VisualizationParametersEvents.ViewHomogeneityToleranceChange -= OnViewHomogeneityToleranceChange;
+            VisualizationParametersEvents.ViewVolumetricObjectScaleFactorChange -= OnViewVolumetricObjectScaleFactorChange;
         }
 
         private void OnViewAlphaCutoffChange(float val) => OpacityCutoff = val;
@@ -215,5 +239,8 @@ namespace UnityCTVisualizer
 
 
         private void OnViewHomogeneityToleranceChange(byte val) => HomogeneityTolerance = val;
+
+
+        private void OnViewVolumetricObjectScaleFactorChange(float val) => VolumetricObjectScaleFactor = val;
     }
 }

@@ -27,6 +27,7 @@ namespace UnityCTVisualizer
         public float SamplingQualityFactor;
         public List<float> LODDistances;
         public byte HomogeneityTolerance;
+        public float VolumetricObjectScaleFactor;
 
 
         public readonly void Serialize(string fp)
@@ -70,12 +71,14 @@ namespace UnityCTVisualizer
         [SerializeField] TMP_Dropdown m_InterpolationDropDown;
         [SerializeField] Slider m_HomogeneityToleranceSlider;
         [SerializeField] TMP_InputField m_HomogeneityToleranceInputField;
+        [SerializeField] Slider m_ObjectScaleSlider;
+        [SerializeField] TMP_InputField m_ObjectScaleInputField;
 
         [SerializeField] Button m_Save;
         [SerializeField] Button m_Load;
         [SerializeField] RectTransform m_LODDistancesControlContainer;
-        [SerializeField, Range(0.1f, 1.0f)] float m_MinLODDistance = 0.2f;
-        [SerializeField, Range(1.1f, 5.0f)] float m_MaxLODDistance = 3.0f;
+        private float m_MinLODDistance;
+        private float m_MaxLODDistance;
         [SerializeField] Material m_AxisAndTicksMaterial;
         [SerializeField] GameObject m_LODDistanceControlPrefab;
 
@@ -131,6 +134,14 @@ namespace UnityCTVisualizer
             m_HomogeneityToleranceSlider.maxValue = 255;
             m_HomogeneityToleranceInputField.readOnly = false;
             m_HomogeneityToleranceInputField.contentType = TMP_InputField.ContentType.IntegerNumber;
+
+            m_ObjectScaleSlider.minValue = VolumetricDataset.VolumetricObjectScaleFactorRange.x;
+            m_ObjectScaleSlider.maxValue = VolumetricDataset.VolumetricObjectScaleFactorRange.y;
+            m_ObjectScaleInputField.readOnly = false;
+            m_ObjectScaleInputField.contentType = TMP_InputField.ContentType.DecimalNumber;
+
+            m_MinLODDistance = Camera.main.nearClipPlane;
+            m_MaxLODDistance = Camera.main.farClipPlane;
         }
 
 
@@ -159,6 +170,8 @@ namespace UnityCTVisualizer
             m_SamplingQualityFactorInputField.onSubmit.AddListener(OnSamplingQualityFactorInput);
             m_HomogeneityToleranceSlider.onValueChanged.AddListener(OnHomogeneityToleranceInput);
             m_HomogeneityToleranceInputField.onSubmit.AddListener(OnHomogeneityToleranceInput);
+            m_ObjectScaleSlider.onValueChanged.AddListener(OnVolumetricObjectScaleFactorInput);
+            m_ObjectScaleInputField.onValueChanged.AddListener(OnVolumetricObjectScaleFactorInput);
 
             m_Save.onClick.AddListener(OnSave);
             m_Load.onClick.AddListener(OnLoad);
@@ -169,6 +182,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ModelLODDistancesChange += OnModelLODDistancesChange;
             VisualizationParametersEvents.ModelInterpolationChange += OnModelInterpolationChange;
             VisualizationParametersEvents.ModelHomogeneityToleranceChange += OnModelHomogeneityToleranceChange;
+            VisualizationParametersEvents.ModelVolumetricObjectScaleFactorChange += OnModelVolumetricObjectScaleFactorChange;
         }
 
         private void OnDisable()
@@ -183,6 +197,8 @@ namespace UnityCTVisualizer
             m_SamplingQualityFactorInputField.onSubmit.RemoveAllListeners();
             m_HomogeneityToleranceSlider.onValueChanged.RemoveAllListeners();
             m_HomogeneityToleranceInputField.onSubmit.RemoveAllListeners();
+            m_ObjectScaleSlider.onValueChanged.RemoveAllListeners();
+            m_ObjectScaleInputField.onValueChanged.RemoveAllListeners();
 
             m_Save.onClick.RemoveAllListeners();
             m_Load.onClick.RemoveAllListeners();
@@ -193,6 +209,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ModelLODDistancesChange -= OnModelLODDistancesChange;
             VisualizationParametersEvents.ModelInterpolationChange -= OnModelInterpolationChange;
             VisualizationParametersEvents.ModelHomogeneityToleranceChange -= OnModelHomogeneityToleranceChange;
+            VisualizationParametersEvents.ModelVolumetricObjectScaleFactorChange -= OnModelVolumetricObjectScaleFactorChange;
         }
 
 
@@ -283,6 +300,12 @@ namespace UnityCTVisualizer
         private void OnHomogeneityToleranceInput(string val) => VisualizationParametersEvents.ViewHomogeneityToleranceChange?.Invoke((byte)Mathf.Clamp(int.Parse(val), 0, 255));
 
 
+        private void OnVolumetricObjectScaleFactorInput(float val) => VisualizationParametersEvents.ViewVolumetricObjectScaleFactorChange?.Invoke(val);
+
+
+        private void OnVolumetricObjectScaleFactorInput(string val) => VisualizationParametersEvents.ViewVolumetricObjectScaleFactorChange?.Invoke(float.Parse(val));
+
+
         /////////////////////////////////
         /// MODEL CALLBACKS
         /////////////////////////////////
@@ -368,6 +391,13 @@ namespace UnityCTVisualizer
         }
 
 
+        private void OnModelVolumetricObjectScaleFactorChange(float value)
+        {
+            m_ObjectScaleSlider.SetValueWithoutNotify(value);
+            m_ObjectScaleInputField.SetTextWithoutNotify(value.ToString("0.00"));
+        }
+
+
         void OnSave()
         {
             m_ManagerUI.RequestFilesystemEntry(FilesystemExplorerMode.SAVE_VISUALIZATION_PARAMETERS);
@@ -390,6 +420,7 @@ namespace UnityCTVisualizer
                 SamplingQualityFactor= m_SamplingQualityFactorSlider.value,
                 LODDistances = m_LODDistances,
                 HomogeneityTolerance = (byte)m_HomogeneityToleranceSlider.value,
+                VolumetricObjectScaleFactor = m_ObjectScaleSlider.value,
             };
             visParams.Serialize(fp);
         }
@@ -415,6 +446,7 @@ namespace UnityCTVisualizer
             OnSamplingQualityFactorInput(visParams.SamplingQualityFactor);
             OnLODDistancesInput(visParams.LODDistances);
             OnHomogeneityToleranceInput(visParams.HomogeneityTolerance);
+            OnVolumetricObjectScaleFactorInput(visParams.VolumetricObjectScaleFactor);
             OnTFDropDownChange(m_TFDropDown.options.FindIndex((m) => m.text == visParams.TF.ToString()));
             OnInterDropDownChange(m_InterpolationDropDown.options.FindIndex((m) => m.text == visParams.Interpolation.ToString()));
         }

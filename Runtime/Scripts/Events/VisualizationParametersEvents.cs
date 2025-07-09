@@ -40,6 +40,7 @@ namespace UnityCTVisualizer
         public static Action<float> ModelSamplingQualityFactorChange;
         public static Action<List<float>> ModelLODDistancesChange;
         public static Action<byte> ModelHomogeneityToleranceChange;
+        public static Action<float> ModelVolumetricObjectScaleFactorChange;
 
         ////////////////////////////////
         /// Invoked by Views (UIs)
@@ -50,6 +51,7 @@ namespace UnityCTVisualizer
         public static Action<float> ViewSamplingQualityFactorChange;
         public static Action<List<float>> ViewLODDistancesChange;
         public static Action<byte> ViewHomogeneityToleranceChange;
+        public static Action<float> ViewVolumetricObjectScaleFactorChange;
     }
 }
 

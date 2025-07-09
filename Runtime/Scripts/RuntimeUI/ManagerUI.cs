@@ -86,9 +86,9 @@ namespace UnityCTVisualizer
         }
 
 
-        void OnMetadataImport(Tuple<CVDSMetadata, PipelineParams, DebugginParams> args)
+        void OnMetadataImport(CVDSMetadata metadata)
         {
-            m_MetadataUI.Init(args.Item1);
+            m_MetadataUI.Init(metadata);
             m_MetadataUI.gameObject.SetActive(true);
         }
 

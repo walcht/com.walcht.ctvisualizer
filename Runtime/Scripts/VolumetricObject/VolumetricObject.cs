@@ -260,6 +260,7 @@ namespace UnityCTVisualizer
         private Vector4[] m_nbr_bricks_per_res_lvl;
         private bool m_vis_params_dirty = false;
         private Vector4[] m_VolumeDimsPerResLvl;
+        private Vector3 m_InitialScale = Vector3.one;
 
 
         /////////////////////////////////
@@ -448,13 +449,6 @@ namespace UnityCTVisualizer
 #endif
                 }, TaskContinuationOptions.OnlyOnFaulted);
 
-                // scale mesh to match correct dimensions of the original volumetric data
-                m_transform.localScale = new Vector3(
-                     MM_TO_METERS * m_metadata.VoxelDims.x * m_gpu_brick_cache_size.x,
-                     MM_TO_METERS * m_metadata.VoxelDims.y * m_gpu_brick_cache_size.y,
-                     MM_TO_METERS * m_metadata.VoxelDims.z * m_gpu_brick_cache_size.z
-                );
-
                 // finally start the loop
                 StartCoroutine(InCoreLoop());
             }
@@ -486,8 +480,6 @@ namespace UnityCTVisualizer
                 InitializePageDirectory();
 
                 SetOOCShaderProperties();
-
-                ScaleOOCMesh();
 
                 InitializeBrickWireframesPool();
 
@@ -522,6 +514,14 @@ namespace UnityCTVisualizer
 #endif
             // initialize object pools
             m_tex_params_pool = new(m_PipelineParams.MaxNbrGPUBrickUploadsPerFrame);
+
+            // scale mesh to match correct dimensions of the original volumetric data
+            m_transform.localScale = new Vector3(
+                 MM_TO_METERS * m_metadata.VoxelDims.x * m_metadata.Dims.x,
+                 MM_TO_METERS * m_metadata.VoxelDims.y * m_metadata.Dims.y,
+                 MM_TO_METERS * m_metadata.VoxelDims.z * m_metadata.Dims.z
+            );
+            m_InitialScale = m_transform.localScale;
 
             // rotate the volume according to provided Euler angles
             m_transform.localRotation = Quaternion.Euler(m_metadata.EulerRotation);
@@ -821,16 +821,6 @@ namespace UnityCTVisualizer
             m_material.SetVector(SHADER_BRICK_CACHE_NBR_BRICKS, brick_cache_nbr_bricks);
         }
 
-        private void ScaleOOCMesh()
-        {
-            // scale mesh to match correct dimensions of the original volumetric data
-            m_transform.localScale = new Vector3(
-                 MM_TO_METERS * m_metadata.VoxelDims.x * m_metadata.Dims.x,
-                 MM_TO_METERS * m_metadata.VoxelDims.y * m_metadata.Dims.y,
-                 MM_TO_METERS * m_metadata.VoxelDims.z * m_metadata.Dims.z
-            );
-        }
-
 
         private void InitializeBrickWireframesPool()
         {
@@ -899,6 +889,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ModelLODDistancesChange += OnModelLODDistancesChange;
             VisualizationParametersEvents.ModelInterpolationChange += OnModelInterpolationChange;
             VisualizationParametersEvents.ModelHomogeneityToleranceChange += OnModelHomogeneityChange;
+            VisualizationParametersEvents.ModelVolumetricObjectScaleFactorChange += OnModelVolumetricObjectScaleFactorChange;
         }
 
         private void OnDisable()
@@ -909,6 +900,7 @@ namespace UnityCTVisualizer
             VisualizationParametersEvents.ModelLODDistancesChange -= OnModelLODDistancesChange;
             VisualizationParametersEvents.ModelInterpolationChange -= OnModelInterpolationChange;
             VisualizationParametersEvents.ModelHomogeneityToleranceChange -= OnModelHomogeneityChange;
+            VisualizationParametersEvents.ModelVolumetricObjectScaleFactorChange -= OnModelVolumetricObjectScaleFactorChange;
 
             // clear UAV targets
             Graphics.ClearRandomWriteTargets();
@@ -2240,6 +2232,12 @@ namespace UnityCTVisualizer
                 return;
             m_homogeneity_tolerance = value;
             m_pt_requires_homogeneity_update = true;
+        }
+
+
+        private void OnModelVolumetricObjectScaleFactorChange(float val)
+        {
+            m_transform.localScale = m_InitialScale * val;
         }
 
 

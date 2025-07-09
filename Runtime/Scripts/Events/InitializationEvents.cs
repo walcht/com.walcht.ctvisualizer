@@ -3,11 +3,17 @@ using System;
 namespace UnityCTVisualizer {
     public static class InitializationEvents {
         /// <summary>
-        ///     Invoked when a SEARCH_CVDS metadata is successfully imported. The CVDSMetadata instance along with additional
-        ///     runtime-constant pipeline parameters and debugging parametrs that are used to create the volumetric object
-        ///     are passed to the handler(s).
+        ///     Invoked when a CVDS metadata is successfully imported.
         /// </summary>
-        public static Action<Tuple<CVDSMetadata, PipelineParams, DebugginParams>> OnMetadataImport;
+        public static Action<CVDSMetadata> OnMetadataImport;
+
+        /// <summary>
+        ///     Invoked when the user requests the volumetric object to be visualized (after potentially setting the
+        ///     offline pipeline parameters, debugging parameters, and runtime visualization parameters). The CVDSMetadata
+        ///     instance along with additional runtime-constant pipeline parameters and debugging parametrs that are used
+        ///     to create the volumetric object are passed to the handler(s).
+        /// </summary>
+        public static Action<Tuple<CVDSMetadata, PipelineParams, DebugginParams>> OnVisualize;
 
         /// <summary>
         ///     Invoked when a volumetric dataset is successfully created. The VolumetricDataset ScriptableObject

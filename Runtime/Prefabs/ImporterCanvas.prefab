@@ -224,7 +224,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: -0.000030517578}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 1}
 --- !u!114 &6447587361725052116
@@ -1182,6 +1182,7 @@ MonoBehaviour:
   m_CVDSNameInputField: {fileID: 2596270832046270055}
   m_ImportCVDSBtn: {fileID: 4035968115034073242}
   m_VisualizeBtn: {fileID: 8384797797875578232}
+  m_VisualizeBtnText: {fileID: 2550089800072681917}
   m_BrickSize: {fileID: 3692431412078951739}
   m_NbrImporterThreads: {fileID: 2642810934252984943}
   m_RenderingMode: {fileID: 6405391198711203947}
@@ -3827,6 +3828,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Visualize
       objectReference: {fileID: 0}
+    - target: {fileID: 2784787939540566918, guid: 7aa66d66f01872c42b00c5a60533fced, type: 3}
+      propertyPath: m_Name
+      value: VisualizeBtnText
+      objectReference: {fileID: 0}
     - target: {fileID: 4407341243192566787, guid: 7aa66d66f01872c42b00c5a60533fced, type: 3}
       propertyPath: m_Pivot.x
       value: 1
@@ -3921,6 +3926,17 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 4407341243192566787, guid: 7aa66d66f01872c42b00c5a60533fced, type: 3}
   m_PrefabInstance: {fileID: 2626833817842412029}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &2550089800072681917 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 511121556879388736, guid: 7aa66d66f01872c42b00c5a60533fced, type: 3}
+  m_PrefabInstance: {fileID: 2626833817842412029}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4688fdb7df04437aeb418b961361dc5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!114 &8384797797875578232 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 5776053837364403333, guid: 7aa66d66f01872c42b00c5a60533fced, type: 3}
@@ -6121,7 +6137,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2160465252762748213, guid: cebf0d9bb1daabf49be129f15ef702e8, type: 3}
       propertyPath: m_Value
-      value: 1
+      value: 1.0000002
       objectReference: {fileID: 0}
     - target: {fileID: 7609466736335901937, guid: cebf0d9bb1daabf49be129f15ef702e8, type: 3}
       propertyPath: m_Name

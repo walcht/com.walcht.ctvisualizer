@@ -12,7 +12,7 @@ namespace UnityCTVisualizer
 
         [SerializeField] GameObject m_VolumetricObjectPrefab;
         [SerializeField] Vector3 m_VolumetricObjectPosition;
-        private VolumetricObject m_VolumetricObject;
+        private VolumetricObject m_VolumetricObject = null;
         private VolumetricDataset m_VolumetricDataset;
 
         private void Awake()
@@ -28,24 +28,39 @@ namespace UnityCTVisualizer
         void OnEnable()
         {
             InitializationEvents.OnMetadataImport += OnMetadataImport;
+            InitializationEvents.OnVisualize += OnVisualize;
         }
 
         void OnDisable()
         {
             InitializationEvents.OnMetadataImport -= OnMetadataImport;
+            InitializationEvents.OnVisualize -= OnVisualize;
         }
 
-        private void OnMetadataImport(Tuple<CVDSMetadata, PipelineParams, DebugginParams> args)
+
+        private void OnMetadataImport(CVDSMetadata metadata)
         {
-            CVDSMetadata metadata = args.Item1;
+            m_VolumetricDataset.Init(metadata);
+            Debug.Log($"dataset loaded successfully from: {metadata.RootFilepath}");
+            InitializationEvents.OnVolumetricDatasetCreation?.Invoke(m_VolumetricDataset);
+            InitializationEvents.OnHistogramImport?.Invoke(Importer.ImportHistogram(metadata));
+
+            // make the volumetric model dispatch its default visualization params state so that
+            // listeners get the default visualization parameters
+            m_VolumetricDataset.DispatchVisualizationParamsChangeEvents();
+        }
+
+
+        private void OnVisualize(Tuple<CVDSMetadata, PipelineParams, DebugginParams> args)
+        {
+            if (m_VolumetricObject != null)
+            {
+                // will cause a 1s freeze
+                DestroyImmediate(m_VolumetricObject);
+            }
+
             PipelineParams pipelineParams = args.Item2;
             DebugginParams debugginParams = args.Item3;
-
-            m_VolumetricDataset.Init(metadata);
-
-            Debug.Log($"dataset loaded successfully from: {metadata.RootFilepath}");
-
-            InitializationEvents.OnVolumetricDatasetCreation?.Invoke(m_VolumetricDataset);
 
             // create the volumetric object that is backed by the previously created volumetric dataset
             m_VolumetricObject = Instantiate<GameObject>(
@@ -60,8 +75,6 @@ namespace UnityCTVisualizer
             // make the volumetric model dispatch its default visualization params state so that
             // listeners get the default visualization parameters
             m_VolumetricDataset.DispatchVisualizationParamsChangeEvents();
-
-            InitializationEvents.OnHistogramImport?.Invoke(Importer.ImportHistogram(metadata));
         }
     }
 }

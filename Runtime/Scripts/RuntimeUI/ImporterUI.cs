@@ -12,6 +12,7 @@ namespace UnityCTVisualizer
         [SerializeField] TMP_InputField m_CVDSNameInputField;
         [SerializeField] Button m_ImportCVDSBtn;
         [SerializeField] Button m_VisualizeBtn;
+        [SerializeField] TMP_Text m_VisualizeBtnText;
 
 
         /////////////////////////////////////
@@ -143,7 +144,13 @@ namespace UnityCTVisualizer
             }
             try
             {
-                m_CurrentMetadata = Importer.ImportMetadata(directoryPath);
+                CVDSMetadata _metadata = Importer.ImportMetadata(directoryPath);
+                // TODO: provide comparison operator for CVDS metadata objects
+                if (_metadata == m_CurrentMetadata)
+                {
+                    return;
+                }
+                m_CurrentMetadata = _metadata;
 
                 {
                     // fill the allowed number of importer threads options
@@ -236,6 +243,7 @@ namespace UnityCTVisualizer
                 }
 
                 m_VisualizeBtn.interactable = true;
+                m_VisualizeBtnText.text = "VISUALIZE";
                 m_NbrImporterThreads.interactable = true;
                 m_BrickSize.interactable = true;
                 m_RenderingMode.interactable = true;
@@ -246,6 +254,8 @@ namespace UnityCTVisualizer
 
                 m_CVDSNameInputField.textComponent.color = m_DefaultTextColor;
                 m_CVDSNameInputField.text = new DirectoryInfo(directoryPath).Name;
+
+                InitializationEvents.OnMetadataImport?.Invoke(m_CurrentMetadata);
 
                 Debug.Log($"successfully imported SEARCH_CVDS metadta from: {directoryPath}");
             }
@@ -342,7 +352,9 @@ namespace UnityCTVisualizer
         }
 
 
-        void OnVisualizeClick() => InitializationEvents.OnMetadataImport?.Invoke(
+        void OnVisualizeClick()
+        {
+            InitializationEvents.OnVisualize?.Invoke(
             new Tuple<CVDSMetadata, PipelineParams, DebugginParams>(
               m_CurrentMetadata,
               new PipelineParams()
@@ -369,6 +381,8 @@ namespace UnityCTVisualizer
                   RandomSeedValid = m_RandomSeedToggle.isOn,
               }
             )
-        );
+            );
+            m_VisualizeBtnText.text = "RE-VISUALIZE";
+        }
     }
 }
