@@ -171,6 +171,14 @@ MonoBehaviour:
     - line: '|   - {instanceID: 0}'
     - line: '|   - {fileID: -944628639613478452, guid: 06190e6c28d9dd6b58728f179f0bf60a,
         type: 3}'
+    - line: '|   - {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b,
+        type: 3}'
+    - line: '|   - {fileID: 1785952809460829306, guid: cf1b7336a370969f5af64778d6f8f998,
+        type: 2}'
+    - line: '|   - {fileID: 5893660926509379881, guid: fd06fc3d65da4f647be413d80c3c3c7c,
+        type: 2}'
+    - line: '|   - {fileID: 11400000, guid: ad44ddfe18854f044b890b1059a6a50e, type:
+        2}'
     - line: '|   metroInputSource: 0'
     - line: '|   wsaTransparentSwapchain: 0'
     - line: '|   m_HolographicPauseOnTrackingLoss: 1'
@@ -203,7 +211,7 @@ MonoBehaviour:
     - line: '|   overrideDefaultApplicationIdentifier: 0'
     - line: '|   AndroidBundleVersionCode: 1'
     - line: '|   AndroidMinSdkVersion: 29'
-    - line: '|   AndroidTargetSdkVersion: 29'
+    - line: '|   AndroidTargetSdkVersion: 0'
     - line: '|   AndroidPreferredInstallLocation: 1'
     - line: '|   aotOptions: '
     - line: '|   stripEngineCode: 1'
