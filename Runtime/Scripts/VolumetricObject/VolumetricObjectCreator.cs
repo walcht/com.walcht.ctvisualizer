@@ -11,7 +11,7 @@ namespace UnityCTVisualizer
     {
 
         [SerializeField] GameObject m_VolumetricObjectPrefab;
-        [SerializeField] Vector3 m_VolumetricObjectPosition;
+        public Vector3 m_InitialVolumetricObjectPosition;
         private VolumetricObject m_VolumetricObject = null;
         private VolumetricDataset m_VolumetricDataset;
 
@@ -65,7 +65,7 @@ namespace UnityCTVisualizer
             // create the volumetric object that is backed by the previously created volumetric dataset
             m_VolumetricObject = Instantiate<GameObject>(
                     m_VolumetricObjectPrefab,
-                    position: m_VolumetricObjectPosition,
+                    position: m_InitialVolumetricObjectPosition,
                     rotation: Quaternion.identity
                 )
                 .GetComponent<VolumetricObject>();
@@ -75,6 +75,8 @@ namespace UnityCTVisualizer
             // make the volumetric model dispatch its default visualization params state so that
             // listeners get the default visualization parameters
             m_VolumetricDataset.DispatchVisualizationParamsChangeEvents();
+
+            InitializationEvents.OnVolumetricObjectCreation?.Invoke(m_VolumetricObject);
         }
     }
 }

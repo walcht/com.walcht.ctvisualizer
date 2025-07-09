@@ -21,6 +21,8 @@ namespace UnityCTVisualizer {
         /// </summary>
         public static Action<VolumetricDataset> OnVolumetricDatasetCreation;
 
+        public static Action<VolumetricObject> OnVolumetricObjectCreation;
+
         public static Action<UInt64[]> OnHistogramImport;
     }
 }
