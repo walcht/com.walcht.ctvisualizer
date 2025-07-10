@@ -131,6 +131,13 @@ MonoBehaviour:
   m_LODDistancesControlContainer: {fileID: 5455679486125358114}
   m_AxisAndTicksMaterial: {fileID: 2100000, guid: f5302e861158dd2469c37108558c9a79, type: 2}
   m_LODDistanceControlPrefab: {fileID: 8612125868756459029, guid: 07c3ee09dc2abb349a2a959b72894a18, type: 3}
+  m_LODPanelPrefab: {fileID: 3640943433089816264, guid: ec098debbdd346645b072eff5668323f, type: 3}
+  m_LODColors:
+  - {r: 0, g: 1, b: 0, a: 0.19607843}
+  - {r: 0, g: 1, b: 1, a: 0.19607843}
+  - {r: 0, g: 0, b: 1, a: 0.19607843}
+  - {r: 0, g: 0, b: 0, a: 0.19607843}
+  - {r: 1, g: 0, b: 0, a: 0.19607843}
 --- !u!1 &1878397517900887991
 GameObject:
   m_ObjectHideFlags: 0
@@ -482,7 +489,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: -0.000024795532}
+  m_AnchoredPosition: {x: 0, y: -0.000024557114}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 1}
 --- !u!114 &6140392799148104140
@@ -1985,11 +1992,11 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 2160465252762748213, guid: cebf0d9bb1daabf49be129f15ef702e8, type: 3}
       propertyPath: m_Size
-      value: 0.9928859
+      value: 0.87534446
       objectReference: {fileID: 0}
     - target: {fileID: 2160465252762748213, guid: cebf0d9bb1daabf49be129f15ef702e8, type: 3}
       propertyPath: m_Value
-      value: 1.0000101
+      value: 0.9999994
       objectReference: {fileID: 0}
     - target: {fileID: 7609466736335901937, guid: cebf0d9bb1daabf49be129f15ef702e8, type: 3}
       propertyPath: m_Name
