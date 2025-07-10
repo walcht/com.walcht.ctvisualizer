@@ -77,10 +77,10 @@ namespace UnityCTVisualizer
         [SerializeField] Button m_Save;
         [SerializeField] Button m_Load;
         [SerializeField] RectTransform m_LODDistancesControlContainer;
-        private float m_MinLODDistance;
-        private float m_MaxLODDistance;
         [SerializeField] Material m_AxisAndTicksMaterial;
         [SerializeField] GameObject m_LODDistanceControlPrefab;
+        [SerializeField] GameObject m_LODPanelPrefab;
+        [SerializeField] List<Color> m_LODColors = new() {Color.green, Color.cyan, Color.blue, Color.black, Color.red };
 
         /////////////////////////////////
         // CACHED COMPONENTS
@@ -88,6 +88,7 @@ namespace UnityCTVisualizer
         private int m_PrevTFIndex = -1;
         private int m_PrevInterIndex = -1;
         private List<LODDistanceControlPointUI> m_LODDistanceControls = new();
+        private List<LODPanelComponent> m_LODPanels = new();
         private List<float> m_LODDistances = new();
 
         private ManagerUI m_ManagerUI;
@@ -139,9 +140,6 @@ namespace UnityCTVisualizer
             m_ObjectScaleSlider.maxValue = VolumetricDataset.VolumetricObjectScaleFactorRange.y;
             m_ObjectScaleInputField.readOnly = false;
             m_ObjectScaleInputField.contentType = TMP_InputField.ContentType.DecimalNumber;
-
-            m_MinLODDistance = Camera.main.nearClipPlane;
-            m_MaxLODDistance = Camera.main.farClipPlane;
         }
 
 
@@ -218,7 +216,7 @@ namespace UnityCTVisualizer
             yield return new WaitUntil(() => m_LODDistancesControlContainer.rect.width != 0);
 
             // create the x/y scales and axes
-            m_LODDistancesScale = new ScaleLog(m_MinLODDistance, m_MaxLODDistance, 0, m_LODDistancesControlContainer.rect.width);
+            m_LODDistancesScale = new ScaleLog(VolumetricDataset.LODDistancesRange.x, VolumetricDataset.LODDistancesRange.y, 0, m_LODDistancesControlContainer.rect.width);
 
             m_LODDistancesAxis = new AxisBottom<float>(m_LODDistancesScale)
                 .SetAxisStrokeWidth(1.5f)
@@ -245,10 +243,12 @@ namespace UnityCTVisualizer
 
         private void UpdateLODDistanceAxisTicks(List<float> distances)
         {
+            if (m_LODDistancesAxis == null)
+                return;
             // set the tick positions for the LOD distances axis
             List<float> tick_positions = new(distances);
-            tick_positions.Insert(0, m_MinLODDistance);
-            tick_positions.Add(m_MaxLODDistance);
+            tick_positions.Insert(0, VolumetricDataset.LODDistancesRange.x);
+            tick_positions.Add(VolumetricDataset.LODDistancesRange.y);
             m_LODDistancesAxis.SetTicks(tick_positions);
         }
 
@@ -332,7 +332,7 @@ namespace UnityCTVisualizer
         private void OnLODDistanceControlPositionChange(float pos, int res_lvl)
         {
             m_LODDistances[res_lvl] = m_LODDistancesScale.I(pos * m_LODDistancesControlContainer.rect.width);
-            UpdateLODDistanceAxisTicks(m_LODDistances);
+
             VisualizationParametersEvents.ViewLODDistancesChange?.Invoke(m_LODDistances);
         }
 
@@ -349,35 +349,59 @@ namespace UnityCTVisualizer
 
                 m_LODDistances.Clear();
                 m_LODDistanceControls.Clear();
-                for (int i = 0; i < distances.Count; ++i)
+                for (int i = 0; i <= distances.Count; ++i)
                 {
-                    m_LODDistances.Add(distances[i]);
-                    var cp = Instantiate(m_LODDistanceControlPrefab, m_LODDistancesControlContainer).GetComponent<LODDistanceControlPointUI>();
-                    cp.Init(m_LODDistancesScale.F(distances[i]) / m_LODDistancesControlContainer.rect.width, i);
-                    cp.OnPositionChanged += OnLODDistanceControlPositionChange;
-                    m_LODDistanceControls.Add(cp);
+                    if (i < distances.Count)
+                    {
+                        m_LODDistances.Add(distances[i]);
+                        var cp = Instantiate(m_LODDistanceControlPrefab, m_LODDistancesControlContainer).GetComponent<LODDistanceControlPointUI>();
+                        cp.Init(m_LODDistancesScale.F(distances[i]) / m_LODDistancesControlContainer.rect.width, i);
+                        cp.OnPositionChanged += OnLODDistanceControlPositionChange;
+                        m_LODDistanceControls.Add(cp);
+                    }
+
+                    var lodPanel = Instantiate(m_LODPanelPrefab, m_LODDistancesControlContainer).GetComponent<LODPanelComponent>();
+                    Vector2 pos;
+                    if (i == 0)
+                    {
+                        pos = new(
+                            0,
+                            m_LODDistancesScale.F(distances[i]) / m_LODDistancesControlContainer.rect.width
+                        );
+                    }
+                    else if (i == distances.Count)
+                    {
+                        pos = new(
+                            m_LODDistancesScale.F(distances[i - 1]) / m_LODDistancesControlContainer.rect.width,
+                            1
+                        );
+                    }
+                    else
+                    {
+                        pos = new(
+                            m_LODDistancesScale.F(distances[i - 1]) / m_LODDistancesControlContainer.rect.width,
+                            m_LODDistancesScale.F(distances[i]) / m_LODDistancesControlContainer.rect.width
+                        );
+                    }
+                    lodPanel.Init(pos, m_LODDistancesControlContainer);
+                    lodPanel.SetLODColor(i < m_LODColors.Count ? m_LODColors[i] : m_LODColors[^1]);
+                    lodPanel.SetLODLevel(i);
+                    m_LODPanels.Add(lodPanel);
                 }
                 UpdateLODDistanceAxisTicks(distances);
+                return;
             }
             // otherwise if simply one or more LOD distances have changed (while their total number remained the same)
-            else
+            for (int i = 0; i < distances.Count; ++i)
             {
-                bool dirty_axis_ticks = false;
-                for (int i = 0; i < distances.Count; ++i)
-                {
-                    if (m_LODDistances[i] != distances[i])
-                    {
-                        dirty_axis_ticks = true;
-                        m_LODDistances[i] = distances[i];
-                        m_LODDistanceControls[i].SetPosition(m_LODDistancesScale.F(distances[i]) / m_LODDistancesControlContainer.rect.width);
-                    }
-                }
-                if (dirty_axis_ticks)
-                {
-                    UpdateLODDistanceAxisTicks(distances);
-                }
-            }
+                m_LODDistances[i] = distances[i];
+                float x = m_LODDistancesScale.F(distances[i]) / m_LODDistancesControlContainer.rect.width;
+                m_LODDistanceControls[i].SetPosition(x);
 
+                m_LODPanels[i].SetEndPosition(x);
+                m_LODPanels[i + 1].SetStartPosition(x);
+            }
+            UpdateLODDistanceAxisTicks(distances);
         }
 
 

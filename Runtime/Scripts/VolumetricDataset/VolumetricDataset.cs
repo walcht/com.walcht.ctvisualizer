@@ -50,17 +50,21 @@ namespace UnityCTVisualizer
         }
 
         private List<float> m_LODDistances = new();
+        private const float m_MinDistance = 0.25f;
+        public static readonly Vector2 LODDistancesRange = new(Camera.main.nearClipPlane, Camera.main.farClipPlane);
         public List<float> LODDistances
         {
             get => m_LODDistances; set
             {
                 m_LODDistances = value;
+                m_LODDistances[0] = Mathf.Max(m_LODDistances[0], LODDistancesRange.x);
+                m_LODDistances[^1] = Mathf.Min(m_LODDistances[^1], LODDistancesRange.y);
                 for (int i = 0; i < m_LODDistances.Count - 1; ++i)
                 {
                     // make sure LOD distances are sorted
-                    if (m_LODDistances[i] > m_LODDistances[i + 1])
+                    if (m_LODDistances[i] > (m_LODDistances[i + 1] - m_MinDistance))
                     {
-                        m_LODDistances[i] = m_LODDistances[i + 1];
+                        m_LODDistances[i] = Mathf.Max(m_LODDistances[i + 1] - m_MinDistance, LODDistancesRange.x);
                     }
                 }
                 VisualizationParametersEvents.ModelLODDistancesChange?.Invoke(m_LODDistances);

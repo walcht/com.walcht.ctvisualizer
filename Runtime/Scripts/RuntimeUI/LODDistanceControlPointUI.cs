@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 namespace UnityCTVisualizer
 {
-    [RequireComponent(typeof(RectTransform))]
+    [RequireComponent(typeof(RectTransform), typeof(Selectable))]
     public class LODDistanceControlPointUI
         : MonoBehaviour,
             IDragHandler,
@@ -13,20 +13,20 @@ namespace UnityCTVisualizer
     {
         public event Action<float, int> OnPositionChanged;
 
-        [SerializeField]
-        private Selectable m_ControlPointSelectable;
+        [SerializeField] private Image m_Image;
 
-        [SerializeField]
+        private Selectable m_ControlPointSelectable;
         private RectTransform m_ControlPointTransform;
 
-        [SerializeField]
-        private Image m_Image;
-
-        private Vector2 m_AnchorMin = new(0, 0.0f);
-        private Vector2 m_AnchorMax = new(0, 1.0f);
 
         private int m_ResLvl;
         private float m_Position;
+
+        private void Awake()
+        {
+            m_ControlPointTransform = GetComponent<RectTransform>();
+            m_ControlPointSelectable = GetComponent<Selectable>();
+        }
 
 
         /// <summary>
@@ -51,16 +51,14 @@ namespace UnityCTVisualizer
         public void SetPosition(float pos)
         {
             m_Position = Mathf.Clamp01(pos);
-            m_AnchorMin.x = m_Position;
-            m_AnchorMax.x = m_Position;
-            m_ControlPointTransform.anchorMin = m_AnchorMin;
-            m_ControlPointTransform.anchorMax = m_AnchorMax;
+            m_ControlPointTransform.anchorMin = new Vector2(m_Position, m_ControlPointTransform.anchorMin.y);
+            m_ControlPointTransform.anchorMax = new Vector2(m_Position, m_ControlPointTransform.anchorMax.y);
             // don't forget to reset rect position after updating anchors
             m_ControlPointTransform.anchoredPosition = Vector3.zero;
         }
 
 
-        public void OnBeginDrag(PointerEventData eventData)
+        public void OnBeginDrag(PointerEventData _)
         {
             m_ControlPointSelectable.Select();
         }
@@ -68,7 +66,7 @@ namespace UnityCTVisualizer
 
         public void OnDrag(PointerEventData eventData)
         {
-            SetPosition(m_Position + (eventData.delta.x / Screen.width));
+            m_Position += (eventData.delta.x / Screen.width);
             OnPositionChanged?.Invoke(m_Position, m_ResLvl);
         }
     }
