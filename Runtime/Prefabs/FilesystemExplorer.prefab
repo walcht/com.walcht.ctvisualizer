@@ -656,7 +656,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0, g: 0, b: 0, a: 0.7058824}
+  m_Color: {r: 0.09411765, g: 0.09411765, b: 0.09411765, a: 0.98039216}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -734,7 +734,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0.00030517578, y: 0.000015258789}
+  m_AnchoredPosition: {x: 0.00030517578, y: -0.000030517578}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 1}
 --- !u!114 &2671079469257861758
@@ -1112,6 +1112,7 @@ GameObject:
   - component: {fileID: 5230385897955761031}
   - component: {fileID: 5607238256424880289}
   - component: {fileID: 2721193763191073235}
+  - component: {fileID: 1138659633949850201}
   m_Layer: 5
   m_Name: FilesystemExplorer
   m_TagString: Untagged
@@ -1150,7 +1151,7 @@ Canvas:
   serializedVersion: 3
   m_RenderMode: 1
   m_Camera: {fileID: 0}
-  m_PlaneDistance: 5
+  m_PlaneDistance: 1
   m_PixelPerfect: 0
   m_ReceivesEvents: 1
   m_OverrideSorting: 0
@@ -1223,6 +1224,18 @@ MonoBehaviour:
   m_Save: {fileID: 8835325311782349953}
   m_GenerateFilename: {fileID: 7727799020485883692}
   m_SaveWidgetsContainer: {fileID: 6072809539112685452}
+--- !u!225 &1138659633949850201
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5605773365378517958}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &5825556583407594801
 GameObject:
   m_ObjectHideFlags: 0
@@ -1705,7 +1718,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2160465252762748213, guid: cebf0d9bb1daabf49be129f15ef702e8, type: 3}
       propertyPath: m_Value
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 7609466736335901937, guid: cebf0d9bb1daabf49be129f15ef702e8, type: 3}
       propertyPath: m_Name

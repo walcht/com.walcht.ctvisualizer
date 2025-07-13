@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 5934928109561913570}
   - component: {fileID: 8975835562925665413}
   - component: {fileID: 5200095437802350312}
+  - component: {fileID: 6483173375703361542}
   m_Layer: 5
   m_Name: DebugLogger
   m_TagString: Untagged
@@ -52,7 +53,7 @@ Canvas:
   serializedVersion: 3
   m_RenderMode: 1
   m_Camera: {fileID: 0}
-  m_PlaneDistance: 5
+  m_PlaneDistance: 1
   m_PixelPerfect: 0
   m_ReceivesEvents: 1
   m_OverrideSorting: 0
@@ -132,6 +133,18 @@ MonoBehaviour:
   m_maxNbrMessagesUI: 15
   m_maxNbrMessagesPerFrame: 10
   m_debugText: {fileID: 6889130734646681678}
+--- !u!225 &6483173375703361542
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 186191491680464691}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &1769126467177542994
 GameObject:
   m_ObjectHideFlags: 0
@@ -725,7 +738,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0, g: 0, b: 0, a: 0.7058824}
+  m_Color: {r: 0.09411765, g: 0.09411765, b: 0.09411765, a: 0.98039216}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1

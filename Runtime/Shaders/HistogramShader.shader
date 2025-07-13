@@ -11,8 +11,8 @@ Shader "UnityCTVisualizer/HistogramShader"
     SubShader
     {
         Tags { "Queue"="Geometry" "RenderType"="Opaque" }
-        ZWrite Off
         LOD 100
+        ZTest Always
 
         Pass
         {

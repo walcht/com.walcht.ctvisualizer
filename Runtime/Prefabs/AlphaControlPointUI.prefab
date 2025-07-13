@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 1116387276626572587}
   - component: {fileID: 5219658777247429601}
   - component: {fileID: 2728514621907946007}
+  - component: {fileID: 3411738849858135821}
   m_Layer: 5
   m_Name: AlphaControlPointUI
   m_TagString: ColorAlphaControls
@@ -136,3 +137,16 @@ MonoBehaviour:
   m_ControlPointSelectable: {fileID: 5219658777247429601}
   m_ControlPointTransform: {fileID: 3685344737092641117}
   m_Image: {fileID: 1116387276626572587}
+--- !u!114 &3411738849858135821
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1705453905609900449}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a19aff46285b5774b833e03d1d260aa6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  overlayRenderQueueOffset: 1

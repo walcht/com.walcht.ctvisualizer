@@ -30,7 +30,7 @@ Material:
     - _BrickRequestsRandomTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0.39703128, y: 0.8901956}
+        m_Offset: {x: 0.6963687, y: -0.39166915}
     - _BumpMap:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -76,12 +76,12 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     m_Ints:
-    - _BrickSize: 128
-    - _HomogeneityTolerance: 100
+    - _BrickSize: 32
+    - _HomogeneityTolerance: 0
     - _MaxNbrBrickRequests: 16
     - _MaxNbrBrickRequestsPerRay: 1
-    - _MaxOctreeDepth: 4
-    - _MaxResLvl: 2
+    - _MaxOctreeDepth: 6
+    - _MaxResLvl: 4
     - _OctreeStartDepth: 1
     m_Floats:
     - _AlphaCutoff: 0.99607843
@@ -92,7 +92,7 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _InitialStepSize: 0.0007122507
+    - _InitialStepSize: 0.0004492363
     - _LODQualityFactor: 1.0923475
     - _Metallic: 0
     - _Mode: 0
@@ -105,10 +105,10 @@ Material:
     - _UVSec: 0
     - _ZWrite: 1
     m_Colors:
-    - _BrickCacheDims: {r: 910, g: 780, b: 780, a: 0}
-    - _BrickCacheNbrBricks: {r: 7, g: 6, b: 6, a: 0}
+    - _BrickCacheDims: {r: 1054, g: 1020, b: 1020, a: 0}
+    - _BrickCacheNbrBricks: {r: 31, g: 30, b: 30, a: 0}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
-    - _VolumeTexelSize: {r: 0.0024752475, g: 0.0024752475, b: 0.00053418806, a: 0}
+    - _VolumeTexelSize: {r: 0.0007806401, g: 0.0004492363, b: 0.0005602241, a: 0}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

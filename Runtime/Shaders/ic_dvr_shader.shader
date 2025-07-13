@@ -10,9 +10,11 @@ Shader "UnityCTVisualizer/ic_dvr_shader"
 	}
 
 	SubShader {
-        Tags { "Queue" = "Transparent" "RenderType" = "Transparent" }
+        Tags { "Queue" = "Transparent-1" "RenderType" = "Transparent" }
         LOD 500
 		Cull Front
+        ZTest Less
+        ZWrite Off
 		Blend SrcAlpha OneMinusSrcAlpha
 
 		Pass

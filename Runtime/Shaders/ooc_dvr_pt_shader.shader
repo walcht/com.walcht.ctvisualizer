@@ -28,9 +28,11 @@ Shader "UnityCTVisualizer/ooc_dvr_pt_shader"
 	}
 
 	SubShader {
-        Tags { "Queue" = "Transparent" "RenderType" = "Transparent" }
+        Tags { "Queue" = "Transparent-1" "RenderType" = "Transparent" }
         LOD 500
-        Cull Front
+		Cull Front
+        ZTest Less
+        ZWrite Off
 		Blend SrcAlpha OneMinusSrcAlpha
 
 		Pass
