@@ -1125,7 +1125,15 @@ namespace UnityCTVisualizer
                 {
                     continue;
                 }
-                PageEntryFlag page_entry_flag = ExtractPageEntryAlphaChannelData(GetPageTableIndex(brick_id)).flag;
+
+                // due to floating point precision errors we might get a request for a non-existent brick
+                int pt_idx = GetPageTableIndex(brick_id);
+                if (pt_idx < 0)
+                {
+                    continue;
+                }
+
+                PageEntryFlag page_entry_flag = ExtractPageEntryAlphaChannelData(pt_idx).flag;
                 // cleanup brick requests
                 if (!m_cpu_cache.Contains(brick_id) && !m_in_flight_brick_imports.ContainsKey(brick_id)
                     && page_entry_flag == PageEntryFlag.UNMAPPED_PAGE_TABLE_ENTRY)
@@ -1951,11 +1959,15 @@ namespace UnityCTVisualizer
             int y = (id / nbr_bricks.x) % nbr_bricks.y;
             int z = id / (nbr_bricks.x * nbr_bricks.y);
 
+            // due to float32 precision errors, a non-existing brick may be requested
+            // removing an epsilon in the shader size should probably fix this
             if ((x >= m_page_dir_dims[res_lvl].x) || (y >= m_page_dir_dims[res_lvl].y)
                 || (z >= m_page_dir_dims[res_lvl].z))
             {
-                // TODO: this error pops up rarely - figure out why and fix it!
-                throw new Exception("provided brick is outside the range of bricks covered by the page table(s)");
+#if DEBUG
+                Debug.LogWarning($"provided brick (id={brick_id}) is outside the range of bricks covered by the page table(s)");
+#endif
+                return -1;
             }
 
             int idx = (m_page_dir.width * m_page_dir.height) * ((int)m_page_dir_base[res_lvl].z + z)

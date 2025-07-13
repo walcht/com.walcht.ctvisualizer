@@ -267,9 +267,10 @@ Shader "UnityCTVisualizer/ooc_dvr_hybrid_shader"
 #endif
 
                 // start from epsilon to avoid out-of-volume rendering artifacts due to
-                // floating point precision
+                // floating point precision. Ending with -epsilon to avoid invalid
+                // brick requests due to floating point precision errors.
                 [loop]
-                for (float t = initial_epsilon; t < ray.t_out; )
+                for (float t = initial_epsilon; t < (ray.t_out - initial_epsilon); )
                 {
                     float3 accm_ray = ray.origin + ray.dir * t;
                     int res_lvl = chooseDesiredResolutionLevel(accm_ray);
