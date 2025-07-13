@@ -24,7 +24,6 @@ namespace UnityCTVisualizer
     {
         public bool Benchmark;
         public bool BrickWireframes;
-        public bool VisualizeHomogeneousRegions;
         public int RandomSeed;
         public bool RandomSeedValid;
     }
