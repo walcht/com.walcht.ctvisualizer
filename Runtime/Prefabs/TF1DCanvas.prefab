@@ -67,7 +67,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 5ef4f9d078daab945b13eb460feff4c6, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 9a1462085f6a67747af0f5b543d1b6b6, type: 3}
   m_Type: 0
   m_PreserveAspect: 1
   m_FillCenter: 1
@@ -809,8 +809,8 @@ MonoBehaviour:
   m_YAxisContainer: {fileID: 3671431608674900923}
   m_ColorControlPointUIPrefab: {fileID: 8612125868756459029, guid: 17b9642ba0a987989bbe83f78ca323b9, type: 3}
   m_AlphaControlPointUIPrefab: {fileID: 1705453905609900449, guid: ea02ae02dbd8d29d49e56ee8b8819de9, type: 3}
-  AxisMaterial: {fileID: 2100000, guid: f5302e861158dd2469c37108558c9a79, type: 2}
-  TickMaterial: {fileID: 2100000, guid: f5302e861158dd2469c37108558c9a79, type: 2}
+  AxisMaterial: {fileID: 2100000, guid: 0d560e4655eeb7441b92f506756ac16d, type: 2}
+  TickMaterial: {fileID: 2100000, guid: 0d560e4655eeb7441b92f506756ac16d, type: 2}
   HistogramZoomSensitivity: 0.1
   HistogramScaleExtentY: {x: 1, y: 200}
 --- !u!225 &5971930197537398218
@@ -1154,7 +1154,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.09411765, g: 0.09411765, b: 0.09411765, a: 0.98039216}
+  m_Color: {r: 0.09433961, g: 0.09433961, b: 0.09433961, a: 0.9607843}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
