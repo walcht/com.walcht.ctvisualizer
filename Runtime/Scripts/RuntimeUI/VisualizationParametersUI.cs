@@ -215,6 +215,12 @@ namespace UnityCTVisualizer
         {
             yield return new WaitUntil(() => m_LODDistancesControlContainer.rect.width != 0);
 
+            // in Editor mode - this coroutine may get called twice... go figure
+            if (m_LODDistancesScale != null || m_LODDistancesAxis != null)
+            {
+                yield return null;
+            }
+
             // create the x/y scales and axes
             m_LODDistancesScale = new ScaleLog(VolumetricDataset.LODDistancesRange.x, VolumetricDataset.LODDistancesRange.y, 0, m_LODDistancesControlContainer.rect.width);
 
