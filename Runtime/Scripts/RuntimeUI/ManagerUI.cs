@@ -1,6 +1,7 @@
 using UnityEngine;
 using System;
 using System.Collections.Generic;
+using UnityEngine.UI;
 
 namespace UnityCTVisualizer
 {
@@ -58,7 +59,12 @@ namespace UnityCTVisualizer
 
         public void RequestFilesystemEntry(FilesystemExplorerMode entryType)
         {
-            // TODO: disable interactivity of all other UIs
+            // disable interactivity of all other UIs
+            m_ImporterUI.GetComponent<CanvasGroup>().interactable = false;
+            m_MetadataUI.GetComponent<CanvasGroup>().interactable = false;
+            m_VisualizationParamsUI.GetComponent<CanvasGroup>().interactable = false;
+            m_TransferFunction1DUI.GetComponent<CanvasGroup>().interactable = false;
+
             m_FilesystemExplorerUI.gameObject.SetActive(true);
             m_FilesystemExplorerUI.UpdateMode(entryType);
             m_FilesystemExplorerUI.FilesystemEntrySelection += OnFilesystemExplorerEntrySelection;
@@ -68,7 +74,12 @@ namespace UnityCTVisualizer
 
         private void OnFilesystemExplorerEntrySelection(string path = null)
         {
-            // TODO: restore interactivity of all other UIs
+            // restore interactivity of all other UIs
+            m_ImporterUI.GetComponent<CanvasGroup>().interactable = true;
+            m_MetadataUI.GetComponent<CanvasGroup>().interactable = true;
+            m_VisualizationParamsUI.GetComponent<CanvasGroup>().interactable = true;
+            m_TransferFunction1DUI.GetComponent<CanvasGroup>().interactable = true;
+
             m_FilesystemExplorerUI.FilesystemEntrySelection -= OnFilesystemExplorerEntrySelection;
             m_FilesystemExplorerUI.FilesystemExplorerExit -= OnFilesystemExplorerExit;
             FilesystemExplorerEntry?.Invoke(path);
@@ -78,7 +89,12 @@ namespace UnityCTVisualizer
 
         private void OnFilesystemExplorerExit()
         {
-            // TODO: restore interactivity of all other UIs
+            // restore interactivity of all other UIs
+            m_ImporterUI.GetComponent<CanvasGroup>().interactable = true;
+            m_MetadataUI.GetComponent<CanvasGroup>().interactable = true;
+            m_VisualizationParamsUI.GetComponent<CanvasGroup>().interactable = true;
+            m_TransferFunction1DUI.GetComponent<CanvasGroup>().interactable = true;
+
             m_FilesystemExplorerUI.FilesystemEntrySelection -= OnFilesystemExplorerEntrySelection;
             m_FilesystemExplorerUI.FilesystemExplorerExit -= OnFilesystemExplorerExit;
             FilesystemExplorerEntry?.Invoke(null);
