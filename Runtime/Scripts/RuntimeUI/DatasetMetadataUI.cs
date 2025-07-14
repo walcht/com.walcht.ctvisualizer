@@ -45,7 +45,7 @@ namespace UnityCTVisualizer
             m_ChunkSize.text = metadata.ChunkSize.ToString();
             m_ColorDepth.text = $"{metadata.ColorDepth}";
             m_LZ4Compressed.text = metadata.Lz4Compressed ? "true" : "false";
-            m_DecompressedSize.text = ((metadata.Dims.x * metadata.Dims.y * metadata.Dims.z) / (1024.0f * 1024.0f)).ToString("0.00");
+            m_DecompressedSize.text = ((metadata.Dims.x / 1024.0) * (metadata.Dims.y / 1024.0) * metadata.Dims.z).ToString("0.00");
             m_InterBrickInterpolation.text = metadata.ChunkPadding ? "true" : "false";
             m_NbrResolutionLvls.text = metadata.NbrResolutionLvls.ToString();
             m_OctreeSmallestSubdivision.text = metadata.OctreeSmallestSubdivision.ToString();

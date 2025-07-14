@@ -22,6 +22,7 @@ Shader "UnityCTVisualizer/ooc_dvr_hybrid_shader"
         [HideInInspector] _TFColors("Transfer Function Colors Texture", 2D) = "" {}
         [HideInInspector] _PageDir("Top level multi-resolution page directory", 3D) = "" {}
 		_AlphaCutoff("Opacity Cutoff", Range(0.0, 1.0)) = 0.95
+        _HomogeneityTolerance("homogeneity tolerance (i.e., difference of a regions max/min to be considered homogeneous [type: float])", Range(0, 255)) = 0
 
         _InitialStepSize("Opacity Cutoff", Float) = 0.95
         _BrickRequestsRandomTex("Brick requests random (uniform) texture", 2D) = "white" {}
@@ -35,7 +36,6 @@ Shader "UnityCTVisualizer/ooc_dvr_hybrid_shader"
 
         _MaxOctreeDepth("Maximum depth of the Residency Octree [type: int]", Integer) = 5
         _OctreeStartDepth("Depth at which to start the Residency Octree traversal [type: int]", Integer) = 0
-        _HomogeneityTolerance("homogeneity tolerance (i.e., difference of a regions max/min to be considered homogeneous [type: float])", Integer) = 0
 	}
 
 	SubShader {
@@ -52,12 +52,11 @@ Shader "UnityCTVisualizer/ooc_dvr_hybrid_shader"
             #pragma target 5.0
             #pragma vertex vert
             #pragma fragment frag
-//          #define EXPLOIT_SPATIAL_COHERENCY_FOR_PTS_ON
             #include "Include/ooc_common.cginc"
 
-            int _MaxOctreeDepth;
-            int _OctreeStartDepth;
-            uint _HomogeneityTolerance;
+            uniform int _MaxOctreeDepth;
+            uniform int _OctreeStartDepth;
+            uniform float _HomogeneityTolerance = 0;
 
             /// <summary>
             ///
@@ -322,16 +321,7 @@ Shader "UnityCTVisualizer/ooc_dvr_hybrid_shader"
                         
                         int4 page_dir_addrs = getPageDirAddrs(accm_ray, res_lvl);
 
-#ifdef EXPLOIT_SPATIAL_COHERENCY_FOR_PTS_ON
-                        // exploit spatial coherency to avoid expensive texture lookups
-                        if (any(page_dir_addrs != prev_page_dir_addrs))
-                        {
-                            page_dir_entry = _PageDir.Load(page_dir_addrs);
-                            prev_page_dir_addrs = page_dir_addrs;
-                        }
-#else
                         page_dir_entry = _PageDir.Load(page_dir_addrs);
-#endif
 
                         uint paging_flag = asuint(page_dir_entry.w) & 0x000000FF;
 

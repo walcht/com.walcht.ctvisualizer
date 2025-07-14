@@ -165,7 +165,7 @@ namespace UnityCTVisualizer
             private int nbr_measurements = 0;
 
             // in seconds
-            private readonly float m_Threshold = 5;
+            private readonly float m_Threshold = 60;
 
             public FCTMeasurementState(OOCBenchmarkSetup controller)
             {
@@ -239,7 +239,7 @@ namespace UnityCTVisualizer
 
             private void OnNoMoreBrickRequests()
             {
-                m_Controller.m_BenchmarkStats.FCTTimes.Add((float)(Time.realtimeSinceStartupAsDouble - m_StartTime));
+                m_Controller.m_BenchmarkStats.FCTTimes.Add((float)(Time.realtimeSinceStartupAsDouble - 2 - m_StartTime));
                 ++nbr_measurements;
                 if (nbr_measurements >= MAX_NBR_MEASUREMENTS)
                 {

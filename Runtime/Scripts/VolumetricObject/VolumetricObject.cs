@@ -283,7 +283,7 @@ namespace UnityCTVisualizer
         private float m_alpha_cutoff;
         private float m_sampling_quality_factor;
         private float[] m_lod_distances_squared = new float[MAX_ALLOWED_NBR_RESOLUTION_LVLS];
-        private byte m_homogeneity_tolerance;
+        private int m_homogeneity_tolerance;
 
         private bool m_IsAlreadyInitialized = false;
         private int m_NbrBrickRequestsPrevFrame = -1;
@@ -407,6 +407,15 @@ namespace UnityCTVisualizer
 
             if (m_rendering_mode == RenderingMode.IC)
             {
+                // scale mesh to match correct dimensions of the original volumetric data
+                m_transform.localScale = new Vector3(
+                     MM_TO_METERS * m_metadata.VoxelDims.x * m_metadata.NbrChunksPerResolutionLvl[m_PipelineParams.InCoreMaxResolutionLvl].x * m_metadata.ChunkSize,
+                     MM_TO_METERS * m_metadata.VoxelDims.y * m_metadata.NbrChunksPerResolutionLvl[m_PipelineParams.InCoreMaxResolutionLvl].y * m_metadata.ChunkSize,
+                     MM_TO_METERS * m_metadata.VoxelDims.z * m_metadata.NbrChunksPerResolutionLvl[m_PipelineParams.InCoreMaxResolutionLvl].z * m_metadata.ChunkSize
+                ) * (1 << m_PipelineParams.InCoreMaxResolutionLvl);
+                m_InitialScale = m_transform.localScale;
+
+                // create the CPU brick cache
                 m_cpu_cache = new MemoryCache<byte>(pipelineParams.CPUBrickCacheSizeMBs, m_brick_size_cubed);
 
                 // assign material
@@ -454,6 +463,15 @@ namespace UnityCTVisualizer
             }
             else if (m_rendering_mode == RenderingMode.OOC_PT || m_rendering_mode == RenderingMode.OOC_HYBRID)
             {
+                // scale mesh to match correct dimensions of the original volumetric data
+                m_transform.localScale = new Vector3(
+                     MM_TO_METERS * m_metadata.VoxelDims.x * m_metadata.Dims.x,
+                     MM_TO_METERS * m_metadata.VoxelDims.y * m_metadata.Dims.y,
+                     MM_TO_METERS * m_metadata.VoxelDims.z * m_metadata.Dims.z
+                );
+                m_InitialScale = m_transform.localScale;
+
+                // create the CPU brick cache
                 m_cpu_cache = new MemoryCache<byte>(pipelineParams.CPUBrickCacheSizeMBs, m_actual_brick_size_cubed);
 
                 // clear any previously set UAVs
@@ -514,14 +532,6 @@ namespace UnityCTVisualizer
 #endif
             // initialize object pools
             m_tex_params_pool = new(m_PipelineParams.MaxNbrGPUBrickUploadsPerFrame);
-
-            // scale mesh to match correct dimensions of the original volumetric data
-            m_transform.localScale = new Vector3(
-                 MM_TO_METERS * m_metadata.VoxelDims.x * m_metadata.Dims.x,
-                 MM_TO_METERS * m_metadata.VoxelDims.y * m_metadata.Dims.y,
-                 MM_TO_METERS * m_metadata.VoxelDims.z * m_metadata.Dims.z
-            );
-            m_InitialScale = m_transform.localScale;
 
             // rotate the volume according to provided Euler angles
             m_transform.localRotation = Quaternion.Euler(m_metadata.EulerRotation);
@@ -1158,14 +1168,23 @@ namespace UnityCTVisualizer
         }
 
 
+        private float m_frameTimeAcc = 0;
         private void CheckBrickRequestsCompletionStatus(HashSet<UInt32> filtered_brick_requests)
         {
             // if no more new brick requests are dispatched and also no bricks are currently
             // being processed
             if (filtered_brick_requests.Count == 0 && m_in_flight_brick_imports.Count == 0)
             {
-                OnNoMoreBrickRequests?.Invoke();
+                if (m_frameTimeAcc >= 2)
+                {
+                    OnNoMoreBrickRequests?.Invoke();
+                    m_frameTimeAcc = 0;
+                    return;
+                }
+                m_frameTimeAcc += Time.unscaledDeltaTime;
+                return;
             }
+            m_frameTimeAcc = 0;
         }
 
 
@@ -2189,7 +2208,7 @@ namespace UnityCTVisualizer
                 {
                     m_material.SetFloat(SHADER_INITIAL_STEP_SIZE_ID, 1.0f / (Mathf.Max(m_VolumeDimsPerResLvl[0].x, m_VolumeDimsPerResLvl[0].y, m_VolumeDimsPerResLvl[0].z) * m_sampling_quality_factor));
                     m_material.SetFloatArray(SHADER_LOD_DISTANCES_SQUARED_ID, m_lod_distances_squared);
-                    m_material.SetInteger(SHADER_HOMOGENEITY_TOLERANCE_ID, m_homogeneity_tolerance);
+                    m_material.SetFloat(SHADER_HOMOGENEITY_TOLERANCE_ID, m_homogeneity_tolerance);
                     break;
                 }
             }
@@ -2240,6 +2259,8 @@ namespace UnityCTVisualizer
 
         private void OnModelHomogeneityChange(byte value)
         {
+            // TODO: idk... I just don't know...
+            m_material.SetFloat(SHADER_HOMOGENEITY_TOLERANCE_ID, value);
             if (m_homogeneity_tolerance == value)
                 return;
             m_homogeneity_tolerance = value;
