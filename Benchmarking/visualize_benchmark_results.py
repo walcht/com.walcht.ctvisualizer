@@ -226,6 +226,7 @@ def visualize_benchmark_results(fp: str):
 
     paramsBoxText: str
     if results["PipelineParameters"]["RenderingMode"] == RenderingModeEnumMapping["IC"]:
+        frametimes_avg = sum(results['FrameTimes'])/len(results['FrameTimes'])
         ax.set_title("In-Core DVR Frame Times (Lower is Better)")
         paramsBoxText = "\n".join(
             [
@@ -238,6 +239,7 @@ def visualize_benchmark_results(fp: str):
                 f"CPU Brick Cache Size = {results['PipelineParameters']['CPUBrickCacheSizeMBs']}MBs",
                 f"Max Nbr Importer Threads = {results['PipelineParameters']['MaxNbrImporterThreads']}",
                 f"Bricks Loading Time To CPU Cache = {results['BricksLoadingTimeToCPUCache'] * 0.001:.2f}s",
+                f"Frametime Average = {frametimes_avg:.2f}s ({int(1000/frametimes_avg)} fps)",
             ]
         )
         ax.legend(
@@ -256,6 +258,7 @@ def visualize_benchmark_results(fp: str):
         results["PipelineParameters"]["RenderingMode"]
         == RenderingModeEnumMapping["OOC_PT"]
     ):
+        frametimes_avg = sum(results['FrameTimes'])/len(results['FrameTimes'])
         ax.set_title(
             "Out-of-Core Virtual Memory DVR Approach Frame Times (Lower is Better)"
         )
@@ -267,13 +270,14 @@ def visualize_benchmark_results(fp: str):
                 f"Sampling Quality Factor = {sampling_quality_factor_vals.pop():.2f}",
                 f"Opacity Cutoff = {int(opacity_cutoff_vals.pop() * 255)}",
                 f"Homogeneity Tolerance = {int(homogeneity_tolerance_vals.pop())}",
-                f"LOD Quality Factor = {int(lod_quality_factor_vals.pop())}",
                 f"Max Nbr GPU Brick Uploads Per Frame = {results['PipelineParameters']['MaxNbrGPUBrickUploadsPerFrame']}",
                 f"Max Nbr Importer Threads = {results['PipelineParameters']['MaxNbrImporterThreads']}",
                 f"CPU Brick Cache Size = {results['PipelineParameters']['CPUBrickCacheSizeMBs']}MBs",
                 f"GPU Brick Cache Size = {results['PipelineParameters']['GPUBrickCacheSizeMBs']}MBs",
                 f"Max Nbr Brick Requests Per Frame = {results['PipelineParameters']['MaxNbrBrickRequestsPerFrame']}",
                 f"Max Nbr Brick Requests Per Ray = {results['PipelineParameters']['MaxNbrBrickRequestsPerRay']}",
+                f"Frametime Average = {frametimes_avg:.2f}s ({int(1000/frametimes_avg)} fps)",
+                f"FCT Average = {sum(results["FCTTimes"])/len(results["FCTTimes"]):.3f}s",
             ]
         )
         ax.legend(
@@ -290,6 +294,7 @@ def visualize_benchmark_results(fp: str):
         results["PipelineParameters"]["RenderingMode"]
         == RenderingModeEnumMapping["OOC_HYBRID"]
     ):
+        frametimes_avg = sum(results['FrameTimes'])/len(results['FrameTimes'])
         ax.set_title("Out-of-Core Hybrid DVR Approach Frame Times (Lower is Better)")
         paramsBoxText = "\n".join(
             [
@@ -299,7 +304,6 @@ def visualize_benchmark_results(fp: str):
                 f"Sampling Quality Factor = {sampling_quality_factor_vals.pop():.2f}",
                 f"Opacity Cutoff = {int(opacity_cutoff_vals.pop() * 255)}",
                 f"Homogeneity Tolerance = {int(homogeneity_tolerance_vals.pop())}",
-                f"LOD Quality Factor = {int(lod_quality_factor_vals.pop())}",
                 f"Max Nbr GPU Brick Uploads Per Frame = {results['PipelineParameters']['MaxNbrGPUBrickUploadsPerFrame']}",
                 f"Max Nbr Importer Threads = {results['PipelineParameters']['MaxNbrImporterThreads']}",
                 f"CPU Brick Cache Size = {results['PipelineParameters']['CPUBrickCacheSizeMBs']}MBs",
@@ -308,6 +312,8 @@ def visualize_benchmark_results(fp: str):
                 f"Max Nbr Brick Requests Per Ray = {results['PipelineParameters']['MaxNbrBrickRequestsPerRay']}",
                 f"Octree Start Depth = {results['PipelineParameters']['OctreeStartDepth']}",
                 f"Octree Max Depth = {results['PipelineParameters']['OctreeMaxDepth']}",
+                f"Frametime Average = {frametimes_avg:.2f}s ({int(1000/frametimes_avg)} fps)",
+                f"FCT Average = {sum(results["FCTTimes"])/len(results["FCTTimes"]):.3f}s",
             ]
         )
         ax.legend(

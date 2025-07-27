@@ -51,3 +51,5 @@ MagicLeapOpenXRInput.cs.meta
 
 # Byte-compiled / optimized / DLL files
 Benchmarking/__pycache__/
+Benchmarking/__pycache__.meta
+Benchmarking/*.png.meta
