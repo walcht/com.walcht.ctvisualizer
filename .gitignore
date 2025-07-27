@@ -39,7 +39,6 @@ crashlytics-build.properties
 .DS_Store
 
 # native plugin builds
-*.dll
 *.so
 TextureSubPlugin.dll
 TextureSubPlugin.dll.meta
