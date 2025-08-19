@@ -1,4 +1,4 @@
-![basic_raymarching](https://github.com/user-attachments/assets/efc36dcf-70cf-4756-9f3e-3003523abbf8)# Unity CTVisualizer
+# Unity CTVisualizer
 
 A Unity3D package/plugin for efficiently visualizing and manipulating very large
 (in the range of 100GBs) CT/MRI volumetric datasets. The package comes with a set
@@ -155,19 +155,149 @@ Useful for datasets that fit within the available VRAM on the GPU. Employs no em
 structures. This is mainly used as a baseline to compare the performance of other rendering methods against.
 Consequently, this is by far the simplest shader and sometimes the fastest (especially for small datasets).
 
+---
+
+All DVR rendering modes implement this basic raymarching algorithm (OOC rendering modes adjust it so
+that LoDs can be used):
+
+![basic raymarching technique](https://github.com/user-attachments/assets/b3b7f6d9-db24-4db6-a268-2066563190c6)
+
+Assuming a perspective camera, blue points on the near clipping
+plane are fragment centers. A view ray is cast through each of these points.
+Blue line is an example of a cast view ray that computes the color of its
+fragment *f*. Blue points on the blue line are volume-ray intersection sample
+points. Green points refer to sample points that should, ideally, contribute
+to the final color of fragment *f*. Red points are sample points that should
+not contribute to the final color of fragment *f*.
+
+---
+
+The implementation of this basic IC rendering mode can be found in this shader: [ic\_dvr\_shader](Runtime/Shaders/ic_dvr_shader.shader)
+
 ### DVR Out-of-Core (OOC) Virtual Memory (VM) Rendering Mode
 
 Employs a software-implemented virtual memory scheme (analogous to that employed by operating systems) and a
 multi-resolution, single-level (multi-level support is not yet implemented) page table hierarchy. Granularity of empty
 space skipping and adaptive ray sampling is at the level of page table entries.
 
+---
+
+OOC rendering modes implement this LoD-based raymarching technique (ideally with trilinear interpolation):
+
+![LoD-based raymarching technique employed by OOC rendering modes](https://github.com/user-attachments/assets/86f8c3a3-ce3f-4f39-90d7-942ba03567b7)
+
+The blue line is a cast view ray that computes the color of its fragment *f*. Blue points on that line
+are volume-ray intersection sample points. Light grey dotted lines denote a
+brick’s spatial extent with a constant size of 2<sup>2</sup>. Larger points denote lower
+LoD. The green points are samples that should, ideally, contribute to *f*.
+Conversely, red points are samples that should, ideally, not contribute to *f*.
+Purple points are the actual sampled points. The sampling rate is halved
+once the ray enters a lower LOD brick region.
+
+---
+
+The scheme for the multi-resolution page table hierarchy with no intermediary virtualized page tables is as follows:
+
+![multi-resolution page table directory](https://github.com/user-attachments/assets/f30c5499-d6a6-445c-8242-b3c156e19167)
+
+The blue arrow denotes a cast view ray along which two sample points $s_{0} = (p_{0}, l_{0})$ and $s_{1} = (p_{1}, l_{1})$ have
+to be sampled and require bricks in LOD 0 and 1, respectively. To sample $s_{0}$, the page directory for $\text{LOD} = 0$ is sampled,
+using nearest neighbor interpolation, at the virtual coordinates $p_{0}$. The fetched page directory entry provides $(x, y)$ offset
+into the brick cache to where the mapped brick is (or page, assuming it is at all mapped to begin with). Using the $x_{0}$ and
+$y_{0}$ offsets within the brick, the brick cache is then sampled at location $(x + x_{0}, y + y_{0})$ yielding the final sampled
+value. Similar process occurs for sample point $s_{1}$, the only difference is that the requested brick is of $\text{LOD} = 1$ and,
+therefore, the associated page directory is used to fetch the brick location in cache not at $p_{1}$ but rather at an adjusted
+$p_{1, \text{LOD} = 1}$ to accommodate for the added padding by the bricks in the corresponding resolution level.
+
+---
+
+The page directory (i.e., top-level page table) is implemented as follows:
+
+![page directory implementation details](https://github.com/user-attachments/assets/59bf243c-3dc1-48d4-8c97-258ff86fa8fb)
+
+The page directories for different resolution levels are all implemented within a single 3D texture. For this reason,
+base offset for these subpage directories have to be provided for the shader code.
+*_PageDirBase\[LOD\]* refer to said offsets. In this example, the page directory directly manages the brick cache which is more
+efficient for sufficiently large volumes than a multi-level hierarchy that adds potential additional indirection costs. Dashed
+area denotes wasted texture memory.
+
+It is up to the user to define what homogenous means. A ```homogeneity tolerance``` parameter can be adjusted which defines
+which regions are homogeneous based on whether the difference between their largest and smallest values is less than or equal
+to this tolerance parameter.
+
+---
+
+The implementation of this VM-based OOC rendering mode can be found in this shader: [ooc\_vm\_shader](Runtime/Shaders/ooc_dvr_pt_shader.shader)
+
 ### DVR Out-of-Core (OOC) Hybrid Rendering Mode
 
 Employs a hybrid approach of a virtual memory scheme (same as in OOC VM rendering mode) and an octree-based subdivision
 scheme for empty space skipping. Empty space skipping is achieved at the granularity of both: page table entries and
-octree nodes. The octree is traversed on the GPU and subsequently adds additional overhead to the fragment shader
+octree nodes.
+
+The idea here (at least theoretically), is that using an octree acceleration structure allows us to potentially skip
+larger regions all together (i.e., in a single step contrary to skipping at a PT entry granularity for VM-only rendering
+mode). The octree is traversed on the GPU and subsequently adds additional overhead to the fragment shader
 relative to that of OOC VM rendering mode (i.e., you essentially end up with one more nested for loop which worsens the
 performance).
+
+---
+
+An overview of the implemented Residency Octree is as follows:
+
+![Residency Octree overview](https://github.com/user-attachments/assets/0de664e3-4931-4b54-891e-497f432fcde4)
+
+In the middle is the 2D equivalent of the octree. On the right is the spatial extent of the first
+node of each level of the octree. On the left is the bricks residency for different resolution levels.
+Octree depth and resolution hierarchy are independent.
+
+---
+
+The viewing ray $\vec{r}$ is described by the parametric equation:
+
+$$\vec{r} = \vec{o} + t\vec{d}$$
+
+where $\vec{o}$ is the origin of the ray in object space and $\vec{d}$ is its normalized direction, and $t \in \mathbb{R}$.
+
+In a simplified high level view, given a cast view ray, for each sample along its volume intersection, the residency octree
+works as follows:
+
+1. **LOD selection** - the LOD is chosen according to view parameters.
+
+1. **Sampling rate adjustment** - the sampling rate is adjusted according to the selected LOD.
+
+1. **Maximal octree traversal depth selection** - the maximal traversal depth is chosen based
+   on the previously adjusted sampling rate. Ideally, the smallest skippable node should be
+   significantly larger than the current step size.
+
+1. **Octree traversal** - the octree is traversed up to either:
+
+  1. **Reaching a homogeneous node** - at which point the color contribution is retrieve from
+     the node (either minimum or maximum), the node is skipped, and the algorithm moves back
+     to *step 1)*.
+     
+  1. **Reaching a completely unmapped node** - at which point the brick associated with the
+     current sample point is requested, the node is skipped, and the algorithm moves back to *step 1)*.
+     
+  1. **Reaching previously set maximal traversal depth** - at which point a try at fetching the
+     associated brick with the current sample point is performed. Upon success, if the brick is homogeneous then
+     the brick is sampled once and skipped, otherwise it is sampled up to its boundary. In both cases the algorithm
+     moves back to *step 1)*. Upon failure, an alternative brick is optionally requested. In case no alternative
+     brick is available, the brick is skipped and the algorithm moves back to *step 1)*. If an alternative brick is
+     available, it is sampled up to the boundary of the original brick and the algorithm moves back to *step 1)*.
+
+---
+
+Each residency octree node is implemented as the following struct:
+
+![Residency Octree node struct](https://github.com/user-attachments/assets/9bbba9ad-2acb-4ca4-80bf-4f6cfffb9ba6)
+
+The side length is stored as *side\_halved* to avoid additional runtime subdivisions and computations. The homogeneity
+of a node is determined by comparing the min and max of the *data* field.
+
+---
+
+The implementation of this hybrid OOC rendering mode can be found in this shader: [ooc\_hybrid\_shader](Runtime/Shaders/ooc_dvr_hybrid_shader.shader)
 
 ## Known Issues
 
