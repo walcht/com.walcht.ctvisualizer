@@ -1,24 +1,32 @@
 # Unity CTVisualizer
 
-<!--toc:start-->
-- [Unity CTVisualizer](#unity-ctvisualizer)
-  - [Installation \& Build Instructions](#installation--build-instructions)
-    - [Build Instructions for the Magic Leap 2 Platform](#build-instructions-for-the-magic-leap-2-platform)
-  - [Usage](#usage)
-  - [Project Structure](#project-structure)
-  - [Render Modes](#render-modes)
-    - [In Core (IC) Rendering Mode](#in-core-ic-rendering-mode)
-    - [Out-of-Core (OOC) Virtual Memory (VM) Rendering Mode](#out-of-core-ooc-virtual-memory-vm-rendering-mode)
-    - [Out-of-Core (OOC) Hybrid Rendering Mode](#out-of-core-ooc-hybrid-rendering-mode)
-  - [Known Issues](#known-issues)
-    - [Universal Rendering Pipeline Shader Issues](#universal-rendering-pipeline-shader-issues)
-    - [Blank Screen When Cross-Compiling on Linux for the Magic Leap 2](#blank-screen-when-cross-compiling-on-linux-for-the-magic-leap-2)
-  - [License](#license)
-<!--toc:end-->
-
-A Unity3D package for efficiently visualizing and manipulating very large (in
-the range of 100GBs) CT/MRI volumetric datasets. The package comes with a set
+A Unity3D package/plugin for efficiently visualizing and manipulating very large
+(in the range of 100GBs) CT/MRI volumetric datasets. The package comes with a set
 of samples for different target platforms (e.g., desktop, Magic Leap 2).
+
+![Unity CT Visualizer Snake Dataset Showcase][ctvisualizer-snake-showcase]
+
+This project started as an implementation of the latest state-of-the-art direct
+volume rendering techniques adjusted for immersive environments for my M.Sc. of
+Computer Science thesis.
+
+## Showcase
+
+The following is a demonstrative video of the LoD (level of details) optimization technique of CTVisualizer:
+
+![if you see this message then your Markdown processor does not support video playbacks][snake-dataset-hybrid-playing-lods]
+
+Out-of-core rendering of the Enigma dataset (about 8.00GBs) using around 600MBs of VRAM:
+
+![Unity CT Visualizer Enigma Dataset Showcase][ctvisualizer-enigma-showcase]
+
+Out-of-core rendering of the turtle dataset (about 1.40GBs) using around 440MBs of VRAM:
+
+![Unity CT Visualizer Turtle Dataset Showcase][ctvisualizer-turtle-showcase]
+
+In-core rendering of the Fish dataset (about 300MBs):
+
+![Unity CT Visualizer Fish Dataset Showcase][ctvisualizer-fish-showcase]
 
 ## Installation & Build Instructions
 
@@ -31,25 +39,25 @@ The project is provided as a separate Unity package that can be easily added to 
       ```
     
       After having imported CTVisualizer, you may encounter some missing dependency(ies) issues. Make sure to close and
-      open the Unity editor to trigger a custom resolver for the Git package dependencies (Unity's default package
+      reopen the Unity editor to trigger a custom resolver for the Git package dependencies (Unity's default package
       manager does not support Git packages. Yeah, you read that right...). In case the missing dependency packages are
       not resolved, navigate to ```package.json -> git-dependencies``` and install them manually.
 
-  1. This project makes use of a [native C++ rendering plugin][1] to augment Unity's graphics API to be able to create
-   larger-than-2GBs textures and upload chunks to them. Follow the instructions in [TextureSubPlugin][1] to compile the
-   plugin for your target platform (Windows, Linux, MagicLeap2, or Android).
+  1. This project makes use of a [native C++ rendering plugin][1] to augment Unity's limited graphics API to be able to
+   create larger-than-2GBs textures and upload chunks to them. Follow the instructions in [TextureSubPlugin][1] to
+   compile the plugin for your target platform (Windows, Linux, MagicLeap2, or Android).
 
-  2. CTVisualizer expects input datasets in the form of Chunked Volumetric DataSet (CVDS). A separate, offline, Python
-   CVDS converter is needed and can be installed from [here][2].
+  2. CTVisualizer expects input datasets in the form of [Chunked Volumetric DataSet (CVDS)][2]. A separate, offline,
+   Python CVDS converter is needed and can be installed from [here][2].
 
 Tested on these Unity versions for these target platforms:
 
-| Unity Version | Host Platform  | Target Platform | Status             | Notes |
-| ------------- | -------------- | --------------- | ------------------ | ----- |
-| 6000.0.40f1   | Windows 10     | Windows 10      | :white_check_mark: |       |
-| 6000.0.40f1   | Ubuntu 22.04.5 | Magic Leap 2    | :white_check_mark: | might get a black screen - see Known Issues below|
-| 6000.0.40f1   | Windows 10     | Magic Leap 2    | TODO               |       |
-| 6000.0.40f1   | Ubuntu 22.04.5 | Ubuntu 22.04.5  | TODO               |       |
+| Unity Version | Host Platform  | Target Platform | Status             | Notes                                             |
+| ------------- | -------------- | --------------- | ------------------ | ------------------------------------------------- |
+| 6000.0.40f1   | Windows 10     | Windows 10      | :white_check_mark: |                                                   |
+| 6000.0.40f1   | Ubuntu 22.04.5 | Ubuntu 22.04.5  | TODO               |                                                   |
+| 6000.0.40f1   | Ubuntu 22.04.5 | Magic Leap 2    | :white_check_mark: | might get a black screen - see Known Issues below |
+| 6000.0.40f1   | Windows 10     | Magic Leap 2    | :white_check_mark: |                                                   |
 
 
 ### Build Instructions for the Magic Leap 2 Platform
@@ -116,9 +124,6 @@ done through the provided GUI. To visualize a CT/MRI dataset using CTVisualizer,
       - Bottom gradient color band/texture is for colors (no alpha) classification
       - Changes are reflected realtime in the volumetric object visualization
 
-## Project Structure
-
-TODO
 
 ## Render Modes
 
@@ -127,12 +132,16 @@ different input dataset characteristics (e.g., size, sparsity/homogeneity, aniso
 size is in the range of hundreds of GBs, a lot has to be done in the Shaders and CPU-side code to efficiently handle
 CPU-GPU communications. This has the unfortunate side effect of adding a lot of complexity.
 
+The rendering modes are:
+- [IC: In Core](#in-core-ic-rendering-mode)
+- [OOC\_VM: Out-of-Core Virtual Memory](#out-of-core-ooc-virtual-memory-vm-rendering-mode)
+- [OOC\_HYBRID: Out-of-Core Hybrid (VM + Octree Acceleration Structure)](#out-of-core-ooc-hybrid-rendering-mode)
+
 ### In Core (IC) Rendering Mode
 
 Useful for datasets that fit within the available VRAM on the GPU. Employs no empty space skipping acceleration
 structures. This is mainly used as a baseline to compare the performance of other rendering methods against.
-Consequently, this is by far the simplest shader and sometimes, surprisingly, the fastest (especially for small
-datasets).
+Consequently, this is by far the simplest shader and sometimes the fastest (especially for small datasets).
 
 ### Out-of-Core (OOC) Virtual Memory (VM) Rendering Mode
 
@@ -145,7 +154,8 @@ space skipping and adaptive ray sampling is at the level of page table entries.
 Employs a hybrid approach of a virtual memory scheme (same as in OOC VM rendering mode) and an octree-based subdivision
 scheme for empty space skipping. Empty space skipping is achieved at the granularity of both: page table entries and
 octree nodes. The octree is traversed on the GPU and subsequently adds additional overhead to the fragment shader
-relative to that of OOC VM rendering mode.
+relative to that of OOC VM rendering mode (i.e., you essentially end up with one more nested for loop which worsens the
+performance).
 
 ## Known Issues
 
@@ -170,12 +180,25 @@ is running on Linux. The bug may literally appear out of nowhere - you compile t
 To avoid this, **consider cross-compiling for the ML2 target on a Windows platform** (it is after all the most supported
 platform by the ML2).
 
+Or just avoid the ML2 device altogether. It is a dead platform after all.
+
+## Dataset Sources
+
+Large (> 30 GBs) CT/MRI datasets are extremely hard to find on the internet. For small/medium sized datasets,
+consider the following sources:
+
+- **MorphoSource**: https://www.morphosource.org/
+
 ## License
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-See LICENSE.txt file for more info.
+MIT License. See LICENSE.txt file for more information.
 
 [1]: https://github.com/walcht/TextureSubPlugin
 [2]: https://github.com/walcht/cvds
 [3]: https://docs.unity3d.com/ScriptReference/Application-persistentDataPath.html
 [4]: https://github.com/walcht/Unity-RWStructuredBuffer-Readback-Sample
+[snake-dataset-hybrid-playing-lods]: https://raw.githubusercontent.com/walcht/walcht/refs/heads/master/assets/videos/snake-dataset-hybrid-playing-lods.mp4
+[ctvisualizer-enigma-showcase]: https://raw.githubusercontent.com/walcht/walcht/refs/heads/master/assets/images/ctvisualizer-enigma-showcase.jpg
+[ctvisualizer-snake-showcase]: https://raw.githubusercontent.com/walcht/walcht/refs/heads/master/assets/images/ctvisualizer-snake-showcase.jpg
+[ctvisualizer-turtle-showcase]: https://raw.githubusercontent.com/walcht/walcht/refs/heads/master/assets/images/ctvisualizer-turtle-showcase.jpg
+[ctvisualizer-fish-showcase]: https://raw.githubusercontent.com/walcht/walcht/refs/heads/master/assets/images/ctvisualizer-fish-showcase.jpg
