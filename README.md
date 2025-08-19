@@ -14,7 +14,7 @@ Computer Science thesis.
 
 The following is a demonstrative video of the LoD (level of details) optimization technique of CTVisualizer:
 
-![if you see this message then your Markdown processor does not support video playbacks][snake-dataset-hybrid-playing-lods]
+https://walcht.github.io/walcht/videos/snake-dataset-hybrid-playing-lods.mp4
 
 Out-of-core rendering of the Enigma dataset (about 8.00GBs) using around 600MBs of VRAM:
 
@@ -197,7 +197,6 @@ MIT License. See LICENSE.txt file for more information.
 [2]: https://github.com/walcht/cvds
 [3]: https://docs.unity3d.com/ScriptReference/Application-persistentDataPath.html
 [4]: https://github.com/walcht/Unity-RWStructuredBuffer-Readback-Sample
-[snake-dataset-hybrid-playing-lods]: https://raw.githubusercontent.com/walcht/walcht/refs/heads/master/assets/videos/snake-dataset-hybrid-playing-lods.mp4
 [ctvisualizer-enigma-showcase]: https://raw.githubusercontent.com/walcht/walcht/refs/heads/master/assets/images/ctvisualizer-enigma-showcase.jpg
 [ctvisualizer-snake-showcase]: https://raw.githubusercontent.com/walcht/walcht/refs/heads/master/assets/images/ctvisualizer-snake-showcase.jpg
 [ctvisualizer-turtle-showcase]: https://raw.githubusercontent.com/walcht/walcht/refs/heads/master/assets/images/ctvisualizer-turtle-showcase.jpg
