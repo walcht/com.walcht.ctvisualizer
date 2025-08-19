@@ -1,4 +1,4 @@
-# Unity CTVisualizer
+![basic_raymarching](https://github.com/user-attachments/assets/efc36dcf-70cf-4756-9f3e-3003523abbf8)# Unity CTVisualizer
 
 A Unity3D package/plugin for efficiently visualizing and manipulating very large
 (in the range of 100GBs) CT/MRI volumetric datasets. The package comes with a set
@@ -12,9 +12,21 @@ Computer Science thesis.
 
 ## Showcase
 
-The following is a demonstrative video of the LoD (level of details) optimization technique of CTVisualizer:
+Brick granularity loading to the GPU (using TextureSubPlugin):
 
-https://walcht.github.io/walcht/videos/snake-dataset-hybrid-playing-lods.mp4
+https://github.com/user-attachments/assets/5cee257e-f52a-488a-be92-07cfdbdcb2d6
+
+Camera going through the bbox is also supported:
+
+https://github.com/user-attachments/assets/17d0eaa1-86be-46ac-8c04-e64828dd9006
+
+1D transfer function UI with serialization/deserialization support:
+
+https://github.com/user-attachments/assets/4e02b802-0175-4c3d-af5e-e04a65e49034
+
+LoD (level of details) optimization technique of CTVisualizer:
+
+https://github.com/user-attachments/assets/4d10bece-6b18-41a2-afb3-690c7837de49
 
 Out-of-core rendering of the Enigma dataset (about 8.00GBs) using around 600MBs of VRAM:
 
@@ -117,7 +129,7 @@ done through the provided GUI. To visualize a CT/MRI dataset using CTVisualizer,
   9. In the ```Visualization Parameters``` UI component, choose the transfer function (currently only 1D is supported)
    and adjust runtime visualization parameters (e.g., you can change the interpolation method - choose ```trillinear```
    for best quality).
-  10. The default TF is a 1D transfer function. A ````1D Transfer Function``` UI component should be visible in the
+  10. The default TF is a 1D transfer function. A ```1D Transfer Function``` UI component should be visible in the
    bottom of the screen: 
 
       - Green line is for opacities (i.e., alpha) classification
@@ -133,23 +145,23 @@ size is in the range of hundreds of GBs, a lot has to be done in the Shaders and
 CPU-GPU communications. This has the unfortunate side effect of adding a lot of complexity.
 
 The rendering modes are:
-- [IC: In Core](#in-core-ic-rendering-mode)
-- [OOC\_VM: Out-of-Core Virtual Memory](#out-of-core-ooc-virtual-memory-vm-rendering-mode)
-- [OOC\_HYBRID: Out-of-Core Hybrid (VM + Octree Acceleration Structure)](#out-of-core-ooc-hybrid-rendering-mode)
+- [DVR IC: DVR In Core](#dvr-in-core-ic-rendering-mode)
+- [DVR OOC\_VM: DVR Out-of-Core Virtual Memory](#dvr-out-of-core-ooc-virtual-memory-vm-rendering-mode)
+- [DVR OOC\_HYBRID: DVR Out-of-Core Hybrid (VM + Octree Acceleration Structure)](#dvr-out-of-core-ooc-hybrid-rendering-mode)
 
-### In Core (IC) Rendering Mode
+### DVR In Core (IC) Rendering Mode
 
 Useful for datasets that fit within the available VRAM on the GPU. Employs no empty space skipping acceleration
 structures. This is mainly used as a baseline to compare the performance of other rendering methods against.
 Consequently, this is by far the simplest shader and sometimes the fastest (especially for small datasets).
 
-### Out-of-Core (OOC) Virtual Memory (VM) Rendering Mode
+### DVR Out-of-Core (OOC) Virtual Memory (VM) Rendering Mode
 
 Employs a software-implemented virtual memory scheme (analogous to that employed by operating systems) and a
 multi-resolution, single-level (multi-level support is not yet implemented) page table hierarchy. Granularity of empty
 space skipping and adaptive ray sampling is at the level of page table entries.
 
-### Out-of-Core (OOC) Hybrid Rendering Mode
+### DVR Out-of-Core (OOC) Hybrid Rendering Mode
 
 Employs a hybrid approach of a virtual memory scheme (same as in OOC VM rendering mode) and an octree-based subdivision
 scheme for empty space skipping. Empty space skipping is achieved at the granularity of both: page table entries and
