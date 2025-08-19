@@ -12,6 +12,10 @@ Computer Science thesis.
 
 ## Showcase
 
+<details>
+
+<summary>Show videos (slows down rendering and scrolling)</summary>
+
 Brick granularity loading to the GPU (using TextureSubPlugin):
 
 https://github.com/user-attachments/assets/5cee257e-f52a-488a-be92-07cfdbdcb2d6
@@ -27,6 +31,8 @@ https://github.com/user-attachments/assets/4e02b802-0175-4c3d-af5e-e04a65e49034
 LoD (level of details) optimization technique of CTVisualizer:
 
 https://github.com/user-attachments/assets/4d10bece-6b18-41a2-afb3-690c7837de49
+
+</details>
 
 Out-of-core rendering of the Enigma dataset (about 8.00GBs) using around 600MBs of VRAM:
 
